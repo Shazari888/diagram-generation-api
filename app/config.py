@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 3600
 
     openai_api_key: str
-    openai_model: str = "gpt-4"
+    openai_model: str = "gpt-3.5-turbo"
 
     kroki_base_url: str = "https://kroki.io"
 
