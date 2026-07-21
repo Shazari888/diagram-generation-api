@@ -2,7 +2,7 @@ name: Build and Test Docker Image
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "shazari888-*" ]
   pull_request:
     branches: [ main ]
 
