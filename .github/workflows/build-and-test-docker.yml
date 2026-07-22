@@ -35,6 +35,12 @@ jobs:
 
       - name: Run container and healthcheck
         run: |
+          cleanup() {
+            docker logs diagram-ci || true
+            docker stop diagram-ci || true
+            docker rm diagram-ci || true
+          }
+          trap cleanup EXIT
           docker run -d --name diagram-ci -p 8000:8000 \
             -e DATABASE_URL=sqlite+aiosqlite:///./test.db \
             -e REDIS_URL=redis://localhost:6379 \
@@ -55,9 +61,6 @@ jobs:
           done
           if [ "$healthy" -ne 1 ]; then
             echo "❌ Server did not become healthy in time"
-            docker logs diagram-ci || true
-            docker stop diagram-ci || true
-            docker rm diagram-ci || true
             exit 1
           fi
           python - <<'PY'
@@ -100,6 +103,7 @@ jobs:
           output_formats = ["svg", "png", "pdf"]
           for diagram_type in diagram_types:
               for output_format in output_formats:
+                  print(f"Testing {diagram_type}/{output_format}")
                   result = post(
                       {
                           "prompt": f"Create a login flow chart for {diagram_type} as {output_format}",
@@ -116,6 +120,3 @@ jobs:
                   assert result["rendered"], (diagram_type, output_format, "empty rendered")
           print("Auth checks and full diagram type/format matrix passed")
           PY
-          docker logs diagram-ci || true
-          docker stop diagram-ci || true
-          docker rm diagram-ci || true
