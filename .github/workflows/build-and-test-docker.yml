@@ -43,14 +43,23 @@ jobs:
             diagram-generation-api:ci
           echo "Waiting for server..."
           sleep 5
+          healthy=0
           for i in {1..10}; do
             sleep 2
             if curl -sSf http://localhost:8000/health > /dev/null 2>&1; then
               echo "✅ Server is healthy"
+              healthy=1
               break
             fi
             echo "Attempt $i: waiting for server..."
           done
+          if [ "$healthy" -ne 1 ]; then
+            echo "❌ Server did not become healthy in time"
+            docker logs diagram-ci || true
+            docker stop diagram-ci || true
+            docker rm diagram-ci || true
+            exit 1
+          fi
           python - <<'PY'
           import json
           import urllib.request
