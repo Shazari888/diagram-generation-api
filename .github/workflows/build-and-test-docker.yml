@@ -65,19 +65,29 @@ jobs:
           fi
           python - <<'PY'
           import json
+          import time
           import urllib.error
           import urllib.request
 
           def post(data, api_key="ci"):
-              req = urllib.request.Request(
-                  "http://localhost:8000/diagrams/generate",
-                  data=json.dumps(data).encode("utf-8"),
-                  headers={"Content-Type": "application/json", "X-API-Key": api_key},
-                  method="POST",
-              )
-              with urllib.request.urlopen(req, timeout=60) as resp:
-                  payload = json.loads(resp.read().decode("utf-8"))
-              return payload
+              delays = [0.5, 1.0, 2.0]
+              for index, delay in enumerate([0.0] + delays):
+                  if delay:
+                      time.sleep(delay)
+                  req = urllib.request.Request(
+                      "http://localhost:8000/diagrams/generate",
+                      data=json.dumps(data).encode("utf-8"),
+                      headers={"Content-Type": "application/json", "X-API-Key": api_key},
+                      method="POST",
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=60) as resp:
+                          payload = json.loads(resp.read().decode("utf-8"))
+                      return payload
+                  except urllib.error.HTTPError as exc:
+                      if exc.code not in (500, 502, 503, 504) or index == len(delays):
+                          raise
+              raise AssertionError("Unreachable retry state")
 
           # Auth checks
           try:

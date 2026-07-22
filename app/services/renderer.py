@@ -30,8 +30,12 @@ def _is_retryable_kroki_failure(response: httpx.Response) -> bool:
     return "failed to launch the browser process" in body or "resource temporarily unavailable" in body
 
 
+def _is_unsupported_output_format(response: httpx.Response) -> bool:
+    return response.status_code == 400 and "unsupported output format" in response.text.lower()
+
+
 async def _post_kroki(client: httpx.AsyncClient, url: str, source: str) -> httpx.Response:
-    delays = [0.4, 1.0, 2.0]
+    delays = [0.4, 1.0, 2.0, 3.0, 5.0]
     attempt = 0
     while True:
         try:
@@ -64,7 +68,7 @@ async def render(source: str, diagram_type: str, output_format: str = "svg") -> 
             return response.text
         return base64.b64encode(response.content).decode("ascii")
 
-    if output_format in {"png", "pdf"} and response.status_code == 400:
+    if output_format in {"png", "pdf"} and _is_unsupported_output_format(response):
         svg_url = f"{settings.kroki_base_url}/{diagram_type}/svg"
         async with httpx.AsyncClient() as client:
             svg_response = await _post_kroki(client, svg_url, source)
@@ -72,5 +76,6 @@ async def render(source: str, diagram_type: str, output_format: str = "svg") -> 
         converted_bytes = _convert_svg(svg_response.content, output_format)
         return base64.b64encode(converted_bytes).decode("ascii")
 
-    response.raise_for_status()
-    return response.text
+    raise RuntimeError(
+        f"Kroki render failed with status {response.status_code}: {response.text[:300]}"
+    )
