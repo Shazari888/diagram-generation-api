@@ -13,6 +13,9 @@ Supported output formats:
 - `png` (returned as base64-encoded PNG bytes)
 - `pdf` (returned as base64-encoded PDF bytes)
 
+When Kroki does not directly support a requested `diagram_type` + `format` pair,
+the API renders SVG first and converts it to PNG/PDF.
+
 ## Setup
 
 ```bash

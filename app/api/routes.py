@@ -45,7 +45,10 @@ async def generate_diagram(
             )
 
     source = await llm.generate_source(body.prompt, body.diagram_type)
-    rendered = await renderer.render(source, body.diagram_type, body.format)
+    try:
+        rendered = await renderer.render(source, body.diagram_type, body.format)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     diagram = await db.create_diagram(
         session,

@@ -51,6 +51,39 @@ jobs:
             fi
             echo "Attempt $i: waiting for server..."
           done
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          def post(data):
+              req = urllib.request.Request(
+                  "http://localhost:8000/diagrams/generate",
+                  data=json.dumps(data).encode("utf-8"),
+                  headers={"Content-Type": "application/json", "X-API-Key": "ci"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  payload = json.loads(resp.read().decode("utf-8"))
+              return payload
+
+          cases = [
+              ("mermaid", "pdf"),
+              ("d2", "png"),
+              ("d2", "pdf"),
+          ]
+
+          for diagram_type, output_format in cases:
+              result = post(
+                  {
+                      "prompt": "Create a login flow chart",
+                      "diagram_type": diagram_type,
+                      "format": output_format,
+                  }
+              )
+              assert result["format"] == output_format, (diagram_type, output_format, result["format"])
+              assert result["rendered"], (diagram_type, output_format, "empty rendered")
+          print("Conversion fallback checks passed")
+          PY
           docker logs diagram-ci || true
           docker stop diagram-ci || true
           docker rm diagram-ci || true
