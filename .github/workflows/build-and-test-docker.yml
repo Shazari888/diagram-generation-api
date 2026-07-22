@@ -62,36 +62,59 @@ jobs:
           fi
           python - <<'PY'
           import json
+          import urllib.error
           import urllib.request
 
-          def post(data):
+          def post(data, api_key="ci"):
               req = urllib.request.Request(
                   "http://localhost:8000/diagrams/generate",
                   data=json.dumps(data).encode("utf-8"),
-                  headers={"Content-Type": "application/json", "X-API-Key": "ci"},
+                  headers={"Content-Type": "application/json", "X-API-Key": api_key},
                   method="POST",
               )
               with urllib.request.urlopen(req, timeout=60) as resp:
                   payload = json.loads(resp.read().decode("utf-8"))
               return payload
 
-          cases = [
-              ("mermaid", "pdf"),
-              ("d2", "png"),
-              ("d2", "pdf"),
-          ]
+          # Auth checks
+          try:
+              post({"prompt": "x", "diagram_type": "mermaid", "format": "svg"}, api_key="wrong")
+              raise AssertionError("Expected 401 for wrong API key")
+          except urllib.error.HTTPError as exc:
+              assert exc.code == 401, exc.code
 
-          for diagram_type, output_format in cases:
-              result = post(
-                  {
-                      "prompt": "Create a login flow chart",
-                      "diagram_type": diagram_type,
-                      "format": output_format,
-                  }
-              )
-              assert result["format"] == output_format, (diagram_type, output_format, result["format"])
-              assert result["rendered"], (diagram_type, output_format, "empty rendered")
-          print("Conversion fallback checks passed")
+          req = urllib.request.Request(
+              "http://localhost:8000/diagrams/generate",
+              data=json.dumps({"prompt": "x", "diagram_type": "mermaid", "format": "svg"}).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              urllib.request.urlopen(req, timeout=60)
+              raise AssertionError("Expected 401 for missing API key")
+          except urllib.error.HTTPError as exc:
+              assert exc.code == 401, exc.code
+
+          # Full type/format matrix
+          diagram_types = ["mermaid", "d2", "plantuml", "graphviz"]
+          output_formats = ["svg", "png", "pdf"]
+          for diagram_type in diagram_types:
+              for output_format in output_formats:
+                  result = post(
+                      {
+                          "prompt": f"Create a login flow chart for {diagram_type} as {output_format}",
+                          "diagram_type": diagram_type,
+                          "format": output_format,
+                      }
+                  )
+                  assert result["format"] == output_format, (diagram_type, output_format, result["format"])
+                  assert result["diagram"]["diagram_type"] == diagram_type, (
+                      diagram_type,
+                      output_format,
+                      result["diagram"]["diagram_type"],
+                  )
+                  assert result["rendered"], (diagram_type, output_format, "empty rendered")
+          print("Auth checks and full diagram type/format matrix passed")
           PY
           docker logs diagram-ci || true
           docker stop diagram-ci || true
