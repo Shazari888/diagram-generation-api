@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
-from uuid import UUID
 import logging
+import os
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -15,6 +16,25 @@ _engine = None
 _SessionLocal = None
 
 
+def _normalize_database_url(url: str) -> str:
+    if not os.getenv("VERCEL"):
+        return url
+    sqlite_prefix = "sqlite+aiosqlite:///"
+    if not url.startswith(sqlite_prefix):
+        return url
+    sqlite_path = url[len(sqlite_prefix):]
+    if sqlite_path.startswith("/"):
+        return url
+    filename = os.path.basename(sqlite_path) or "test.db"
+    return f"sqlite+aiosqlite:////tmp/{filename}"
+
+
+def _fallback_sqlite_url() -> str:
+    if os.getenv("VERCEL"):
+        return "sqlite+aiosqlite:////tmp/test.db"
+    return "sqlite+aiosqlite:///./test.db"
+
+
 def _create_engine(url: str):
     return create_async_engine(url)
 
@@ -22,7 +42,7 @@ def _create_engine(url: str):
 def get_engine():
     global _engine, _SessionLocal
     if _engine is None:
-        _engine = _create_engine(settings.database_url)
+        _engine = _create_engine(_normalize_database_url(settings.database_url))
         _SessionLocal = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 
@@ -39,8 +59,7 @@ async def init_db() -> None:
             await conn.run_sync(Base.metadata.create_all)
     except Exception as exc:
         log.warning('Database initialization failed with %s; falling back to sqlite. Error: %s', type(exc).__name__, exc)
-        # Fallback to sqlite in the repo folder
-        sqlite_url = 'sqlite+aiosqlite:///./test.db'
+        sqlite_url = _fallback_sqlite_url()
         _engine = _create_engine(sqlite_url)
         _SessionLocal = async_sessionmaker(_engine, expire_on_commit=False)
         async with _engine.begin() as conn:
