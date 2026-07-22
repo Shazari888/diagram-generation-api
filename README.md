@@ -99,6 +99,57 @@ For testnet settlement (x402.org facilitator), buyer wallet must be funded on Ba
 - testnet USDC (asset in the 402 challenge)
 - enough ETH for gas/approval flow
 
+## Deployment + migration notes (important)
+
+### 1. Ensure old code is fully replaced in production
+
+Use this release flow every time:
+
+1. Push feature branch updates.
+2. Merge/push latest commit to `main`.
+3. Confirm Vercel production is deploying `main` (not an older branch).
+4. Redeploy and verify `/health` returns `200`.
+
+If Vercel points to an old branch or old commit, you can still get startup errors
+even when local code is fixed.
+
+### 2. SQLite path behavior and `test.db`
+
+The API now auto-normalizes SQLite paths on Vercel:
+
+- Local/dev default fallback: `sqlite+aiosqlite:///./test.db`
+- Vercel runtime fallback: `sqlite+aiosqlite:////tmp/test.db`
+
+Why: Vercel's `/var/task` is read-only at runtime, but `/tmp` is writable.
+
+### 3. When you should change `test.db`
+
+Usually, you do **not** need to rename it.
+
+Change the DB path only when:
+
+- You want a different local filename, or
+- You migrate to managed Postgres and set a real `DATABASE_URL`.
+
+For production, preferred setup is managed Postgres (`postgresql+asyncpg://...`)
+instead of SQLite.
+
+### 4. Vercel environment minimum
+
+At minimum set:
+
+- `API_KEY`
+- `OPENAI_API_KEY`
+- `DATABASE_URL` (quickstart: `sqlite+aiosqlite:////tmp/test.db`)
+
+If `X402_ENABLED=true`, also set all required x402 vars:
+
+- `X402_FACILITATOR_URL`
+- `X402_NETWORK`
+- `X402_PAY_TO`
+- `X402_PRICE`
+- `X402_BUILDER_CODE`
+
 ## Visual preview in VS Code (Simple Browser)
 
 1. Run the API: `uvicorn app.main:app --reload`
