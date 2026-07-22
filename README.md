@@ -36,6 +36,7 @@ uvicorn app.main:app --reload
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | No | Liveness check |
+| GET | `/visualizer` | No | Browser UI to test prompts and preview diagrams |
 | POST | `/diagrams/generate` | `X-API-Key` | Generate and store a diagram |
 | GET | `/diagrams/{diagram_id}` | `X-API-Key` | Fetch a stored diagram |
 
@@ -51,3 +52,10 @@ curl -X POST http://localhost:8000/diagrams/generate \
 ## Environment variables
 
 See [.env.example](.env.example).
+
+## Visual preview in VS Code (Simple Browser)
+
+1. Run the API: `uvicorn app.main:app --reload`
+2. In VS Code: `Ctrl+Shift+P` → **Simple Browser: Show**
+3. Enter: `http://127.0.0.1:8000/visualizer`
+4. Paste your API key, choose type/format, enter text prompt, click **Generate**
