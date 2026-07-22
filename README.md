@@ -2,6 +2,17 @@
 
 AI-powered diagram generation API (FastAPI, PostgreSQL, Redis, OpenAI, Kroki).
 
+Supported diagram types:
+- `mermaid`
+- `d2`
+- `plantuml`
+- `graphviz`
+
+Supported output formats:
+- `svg` (returned as raw SVG text)
+- `png` (returned as base64-encoded PNG bytes)
+- `pdf` (returned as base64-encoded PDF bytes)
+
 ## Setup
 
 ```bash
@@ -31,7 +42,7 @@ uvicorn app.main:app --reload
 curl -X POST http://localhost:8000/diagrams/generate \
   -H "X-API-Key: your-secret-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "flowchart for user login", "diagram_type": "mermaid"}'
+  -d '{"prompt": "flowchart for user login", "diagram_type": "mermaid", "format": "svg"}'
 ```
 
 ## Environment variables

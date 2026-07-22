@@ -2,6 +2,7 @@ import hashlib
 import json
 
 import redis.asyncio as redis
+from redis.exceptions import RedisError
 
 from app.config import settings
 
@@ -10,7 +11,12 @@ _client: redis.Redis | None = None
 
 async def connect() -> None:
     global _client
-    _client = redis.from_url(settings.redis_url, decode_responses=True)
+    client = redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await client.ping()
+        _client = client
+    except RedisError:
+        _client = None
 
 
 async def disconnect() -> None:
@@ -28,14 +34,20 @@ def _cache_key(prefix: str, payload: dict) -> str:
 async def get_cached(prefix: str, payload: dict) -> str | None:
     if not _client:
         return None
-    return await _client.get(_cache_key(prefix, payload))
+    try:
+        return await _client.get(_cache_key(prefix, payload))
+    except RedisError:
+        return None
 
 
 async def set_cached(prefix: str, payload: dict, value: str) -> None:
     if not _client:
         return
-    await _client.setex(
-        _cache_key(prefix, payload),
-        settings.cache_ttl_seconds,
-        value,
-    )
+    try:
+        await _client.setex(
+            _cache_key(prefix, payload),
+            settings.cache_ttl_seconds,
+            value,
+        )
+    except RedisError:
+        return

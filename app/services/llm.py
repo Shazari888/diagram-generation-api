@@ -9,6 +9,13 @@ client = AsyncOpenAI(api_key=settings.openai_api_key)
 SYSTEM_PROMPT = """You generate diagram source code only.
 Return raw {diagram_type} syntax with no markdown fences or explanation."""
 
+FALLBACK_BY_TYPE = {
+    "mermaid": "graph TD; A[Start] --> B[Login]; B --> C{Success?}; C -->|Yes| D[Dashboard]; C -->|No| E[Retry]",
+    "d2": "Start: Start\nLogin: Login\nSuccess: Success?\nDashboard: Dashboard\nRetry: Retry\nStart -> Login\nLogin -> Success\nSuccess -> Dashboard: Yes\nSuccess -> Retry: No",
+    "plantuml": "@startuml\nstart\n:Login;\nif (Success?) then (yes)\n  :Dashboard;\nelse (no)\n  :Retry;\nendif\nstop\n@enduml",
+    "graphviz": 'digraph G { A [label="Start"]; B [label="Login"]; C [label="Success?"]; D [label="Dashboard"]; E [label="Retry"]; A -> B; B -> C; C -> D [label="Yes"]; C -> E [label="No"]; }',
+}
+
 
 async def generate_source(prompt: str, diagram_type: str) -> str:
     try:
@@ -27,7 +34,4 @@ async def generate_source(prompt: str, diagram_type: str) -> str:
     except Exception as exc:
         # Fall back to a simple generated diagram so the API remains testable locally
         log.warning('OpenAI call failed (%s). Using fallback diagram. Error: %s', type(exc).__name__, exc)
-        if diagram_type.lower() == 'mermaid':
-            return 'graph TD; A[Start] --> B[Login]; B --> C{Success?}; C -->|Yes| D[Dashboard]; C -->|No| E[Retry]'
-        # Generic fallback for other types
-        return 'fallback-diagram-source'
+        return FALLBACK_BY_TYPE.get(diagram_type.lower(), FALLBACK_BY_TYPE["mermaid"])

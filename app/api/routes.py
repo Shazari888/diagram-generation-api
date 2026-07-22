@@ -27,7 +27,11 @@ async def generate_diagram(
     session: AsyncSession = Depends(db.get_session),
     _: str = Depends(verify_api_key),
 ) -> GenerateDiagramResponse:
-    cache_payload = {"prompt": body.prompt, "diagram_type": body.diagram_type}
+    cache_payload = {
+        "prompt": body.prompt,
+        "diagram_type": body.diagram_type,
+        "format": body.format,
+    }
 
     cached = await cache.get_cached("diagram", cache_payload)
     if cached:
@@ -37,10 +41,11 @@ async def generate_diagram(
             return GenerateDiagramResponse(
                 diagram=DiagramResponse.model_validate(diagram),
                 rendered=data["rendered"],
+                format=body.format,
             )
 
     source = await llm.generate_source(body.prompt, body.diagram_type)
-    rendered = await renderer.render(source, body.diagram_type)
+    rendered = await renderer.render(source, body.diagram_type, body.format)
 
     diagram = await db.create_diagram(
         session,
@@ -58,6 +63,7 @@ async def generate_diagram(
     return GenerateDiagramResponse(
         diagram=DiagramResponse.model_validate(diagram),
         rendered=rendered,
+        format=body.format,
     )
 
 

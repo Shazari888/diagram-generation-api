@@ -1,3 +1,5 @@
+import base64
+
 import httpx
 
 from app.config import settings
@@ -13,4 +15,6 @@ async def render(source: str, diagram_type: str, output_format: str = "svg") -> 
             timeout=30.0,
         )
         response.raise_for_status()
-    return response.text
+    if output_format == "svg":
+        return response.text
+    return base64.b64encode(response.content).decode("ascii")
