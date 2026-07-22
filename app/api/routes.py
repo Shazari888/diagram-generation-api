@@ -31,6 +31,8 @@ VISUALIZER_HTML = """<!doctype html>
     #preview { border: 1px solid #ddd; border-radius: 6px; padding: 12px; min-height: 200px; background: #fafafa; }
     #status { margin: 10px 0; white-space: pre-wrap; }
     #source { margin-top: 12px; width: 100%; min-height: 120px; font-family: Consolas, monospace; }
+    .hint { margin: 8px 0 12px; padding: 10px; border-radius: 6px; background: #eef6ff; border: 1px solid #c8ddff; }
+    .hint a { margin-right: 12px; }
     iframe, img, svg { max-width: 100%; }
   </style>
 </head>
@@ -60,6 +62,17 @@ VISUALIZER_HTML = """<!doctype html>
     const statusEl = document.getElementById("status");
     const previewEl = document.getElementById("preview");
     const sourceEl = document.getElementById("source");
+    let currentPdfObjectUrl = null;
+
+    function base64ToBlobUrl(base64Data, mimeType) {
+      const raw = atob(base64Data);
+      const bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        bytes[i] = raw.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: mimeType });
+      return URL.createObjectURL(blob);
+    }
 
     function setStatus(text, isError) {
       statusEl.style.color = isError ? "#b00020" : "#0b5";
@@ -70,6 +83,10 @@ VISUALIZER_HTML = """<!doctype html>
       setStatus("Generating...", false);
       previewEl.innerHTML = "";
       sourceEl.value = "";
+      if (currentPdfObjectUrl) {
+        URL.revokeObjectURL(currentPdfObjectUrl);
+        currentPdfObjectUrl = null;
+      }
 
       const body = {
         prompt: document.getElementById("prompt").value,
@@ -87,9 +104,23 @@ VISUALIZER_HTML = """<!doctype html>
           body: JSON.stringify(body),
         });
 
-        const data = await res.json();
+        const raw = await res.text();
+        let data = null;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = null;
+        }
+
         if (!res.ok) {
-          throw new Error(data.detail || JSON.stringify(data));
+          const errorText = (data && data.detail)
+            ? data.detail
+            : (raw || ("HTTP " + res.status));
+          throw new Error(errorText);
+        }
+
+        if (!data) {
+          throw new Error("Server returned a non-JSON success response.");
         }
 
         sourceEl.value = data.diagram.source || "";
@@ -99,7 +130,14 @@ VISUALIZER_HTML = """<!doctype html>
         } else if (data.format === "png") {
           previewEl.innerHTML = '<img alt="PNG diagram preview" src="data:image/png;base64,' + data.rendered + '" />';
         } else if (data.format === "pdf") {
-          previewEl.innerHTML = '<iframe title="PDF diagram preview" style="width:100%;height:700px;border:0;" src="data:application/pdf;base64,' + data.rendered + '"></iframe>';
+          const pdfUrl = base64ToBlobUrl(data.rendered, "application/pdf");
+          currentPdfObjectUrl = pdfUrl;
+          previewEl.innerHTML =
+            '<div class="hint">' +
+            'PDF generated successfully. If preview is blank in this embedded browser, use this link: ' +
+            '<a href="' + pdfUrl + '" download="diagram.pdf">Download PDF</a>' +
+            '</div>' +
+            '<iframe title="PDF diagram preview" style="width:100%;height:700px;border:0;" src="' + pdfUrl + '"></iframe>';
         }
 
         setStatus("Success: " + data.diagram.id, false);
@@ -125,11 +163,9 @@ async def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.post("/diagrams/generate", response_model=GenerateDiagramResponse)
-async def generate_diagram(
+async def _generate_diagram(
     body: GenerateDiagramRequest,
-    session: AsyncSession = Depends(db.get_session),
-    _: str = Depends(verify_api_key),
+    session: AsyncSession,
 ) -> GenerateDiagramResponse:
     cache_payload = {
         "prompt": body.prompt,
@@ -172,6 +208,23 @@ async def generate_diagram(
         rendered=rendered,
         format=body.format,
     )
+
+
+@router.post("/diagrams/generate", response_model=GenerateDiagramResponse)
+async def generate_diagram(
+    body: GenerateDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+    _: str = Depends(verify_api_key),
+) -> GenerateDiagramResponse:
+    return await _generate_diagram(body, session)
+
+
+@router.post("/paid/diagrams/generate", response_model=GenerateDiagramResponse)
+async def generate_diagram_paid(
+    body: GenerateDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+) -> GenerateDiagramResponse:
+    return await _generate_diagram(body, session)
 
 
 @router.get("/diagrams/{diagram_id}", response_model=DiagramResponse)
