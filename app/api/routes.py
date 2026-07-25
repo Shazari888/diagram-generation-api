@@ -12,9 +12,35 @@ from app.api.schemas import (
     HealthResponse,
 )
 from app.auth import verify_api_key
+from app.config import settings
 from app.services import cache, db, llm, renderer
 
 router = APIRouter()
+
+
+def _base_meta_tag() -> str:
+    if not settings.base_app_id:
+        return ""
+    return f'<meta name="base:app_id" content="{settings.base_app_id}" />'
+
+
+@router.get("/", response_class=HTMLResponse)
+async def home() -> HTMLResponse:
+    return HTMLResponse(
+        content=f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {_base_meta_tag()}
+  <title>Diagram Generation API</title>
+</head>
+<body>
+  <h1>Diagram Generation API</h1>
+  <p>Service is running.</p>
+</body>
+</html>"""
+    )
 
 
 VISUALIZER_HTML = """<!doctype html>

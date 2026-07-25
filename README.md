@@ -62,6 +62,7 @@ See [.env.example](.env.example).
 Optional override:
 
 - `MERMAID_INK_BASE_URL` (default: `https://mermaid.ink`)
+- `BASE_APP_ID` (adds `<meta name="base:app_id" ...>` to `/` for Base domain verification)
 
 x402 seller mode (Base Builder Code attribution):
 

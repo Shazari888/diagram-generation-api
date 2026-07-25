@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     kroki_base_url: str = "https://kroki.io"
     mermaid_ink_base_url: str = "https://mermaid.ink"
+    base_app_id: str | None = None
 
     x402_enabled: bool = False
     x402_facilitator_url: str = "https://x402.org/facilitator"
