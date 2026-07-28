@@ -27,8 +27,6 @@ app.include_router(router)
 if settings.x402_enabled:
     if not settings.x402_pay_to:
         raise ValueError("X402_PAY_TO is required when X402_ENABLED=true")
-    if not settings.x402_builder_code:
-        raise ValueError("X402_BUILDER_CODE is required when X402_ENABLED=true")
 
     facilitator = HTTPFacilitatorClient(
         FacilitatorConfig(url=settings.x402_facilitator_url)
@@ -36,6 +34,13 @@ if settings.x402_enabled:
     x402_server = x402ResourceServer(facilitator).register(
         settings.x402_network, ExactEvmServerScheme()
     )
+
+    route_extensions = (
+        declare_builder_code_extension(settings.x402_builder_code)
+        if settings.x402_builder_code
+        else None
+    )
+
     x402_routes = {
         "POST /paid/diagrams/generate": RouteConfig(
             accepts=PaymentOption(
@@ -46,7 +51,7 @@ if settings.x402_enabled:
             ),
             description="Generate and store a diagram",
             mime_type="application/json",
-            extensions=declare_builder_code_extension(settings.x402_builder_code),
+            **({"extensions": route_extensions} if route_extensions else {}),
         )
     }
     _x402_middleware = payment_middleware(x402_routes, x402_server)
