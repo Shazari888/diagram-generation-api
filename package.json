@@ -10,6 +10,6 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "mppx": "^0.4.11",
-    "stripe": "^18.3.0"
+    "stripe": "^18.5.0"
   }
 }
