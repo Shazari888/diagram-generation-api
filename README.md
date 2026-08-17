@@ -43,19 +43,8 @@ uvicorn app.main:app --reload
 |--------|------|------|-------------|
 | GET | `/health` | None | Liveness check |
 | GET | `/visualizer` | None | Browser UI to test prompts and preview diagrams |
-| POST | `/diagrams/generate` | `X-API-Key` | Generate and store a diagram (free tier) |
-| GET | `/diagrams/{diagram_id}` | `X-API-Key` | Fetch a stored diagram by ID |
 | POST | `/paid/diagrams/generate/svg` | Stripe MPP | Payment-gated SVG generation ($0.05) |
 | POST | `/paid/diagrams/generate/png` | Stripe MPP | Payment-gated PNG generation ($0.07) |
-
-### Generate a diagram (free)
-
-```bash
-curl -X POST https://diagram-generation-api.vercel.app/diagrams/generate \
-  -H "X-API-Key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "flowchart for user login", "diagram_type": "mermaid", "format": "svg"}'
-```
 
 ### Generate a diagram (paid)
 

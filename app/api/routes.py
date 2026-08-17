@@ -236,7 +236,11 @@ async def _generate_diagram(
     )
 
 
-@router.post("/diagrams/generate", response_model=GenerateDiagramResponse)
+@router.post(
+    "/diagrams/generate",
+    response_model=GenerateDiagramResponse,
+    include_in_schema=False,  # Admin-only endpoint, not publicly documented
+)
 async def generate_diagram(
     body: GenerateDiagramRequest,
     session: AsyncSession = Depends(db.get_session),
@@ -263,7 +267,11 @@ async def generate_diagram_paid_png(
     return await _generate_diagram(body, session)
 
 
-@router.get("/diagrams/{diagram_id}", response_model=DiagramResponse)
+@router.get(
+    "/diagrams/{diagram_id}",
+    response_model=DiagramResponse,
+    include_in_schema=False,  # Admin-only endpoint, not publicly documented
+)
 async def get_diagram(
     diagram_id: UUID,
     session: AsyncSession = Depends(db.get_session),
