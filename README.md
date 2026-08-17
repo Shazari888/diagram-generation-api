@@ -2,24 +2,23 @@
 
 AI-powered diagram generation API (FastAPI, PostgreSQL, Redis, OpenAI, Kroki).
 
-Supported diagram types:
+## Supported diagram types
 
 - `mermaid`
 - `d2`
 - `plantuml`
 - `graphviz`
 
-Supported output formats:
+## Supported output formats
 
-- `svg` (returned as raw SVG text)
-- `png` (returned as base64-encoded PNG bytes)
-- `pdf` (returned as base64-encoded PDF bytes)
+- `svg` — returned as raw SVG text
+- `png` — returned as base64-encoded PNG bytes
 
-When Kroki does not directly support a requested `diagram_type` + `format` pair,
-the API renders SVG first and converts it to PNG/PDF.
+When Kroki does not directly support a requested `diagram_type` + `format` pair, the API renders SVG first and converts to PNG automatically.
 
-If Kroki Mermaid rendering fails due transient Chromium launch issues, the API
-automatically falls back to Mermaid Ink for Mermaid outputs.
+If Kroki Mermaid rendering fails due to transient issues, the API falls back to Mermaid Ink automatically.
+
+---
 
 ## Setup
 
@@ -32,188 +31,121 @@ cp .env.example .env     # then fill in values
 
 ## Run
 
-Python API:
-
 ```bash
 uvicorn app.main:app --reload
 ```
 
-MPP gateway (for Stripe SPTs and Tempo crypto):
+---
+
+## API Routes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | None | Liveness check |
+| GET | `/visualizer` | None | Browser UI to test prompts and preview diagrams |
+| POST | `/diagrams/generate` | `X-API-Key` | Generate and store a diagram (free tier) |
+| GET | `/diagrams/{diagram_id}` | `X-API-Key` | Fetch a stored diagram by ID |
+| POST | `/paid/diagrams/generate/svg` | Stripe MPP | Payment-gated SVG generation ($0.05) |
+| POST | `/paid/diagrams/generate/png` | Stripe MPP | Payment-gated PNG generation ($0.07) |
+
+### Generate a diagram (free)
 
 ```bash
-npm install
-npm run mpp:dev
-```
-
-## API
-
-| Method | Path                            | Auth        | Description                                     |
-| ------ | ------------------------------- | ----------- | ------------------------------------------------ |
-| GET    | `/health`                       | No          | Liveness check                                  |
-| GET    | `/visualizer`                   | No          | Browser UI to test prompts and preview diagrams |
-| POST   | `/diagrams/generate`            | `X-API-Key` | Generate and store a diagram                    |
-| POST   | `/paid`                         | MPP         | Stripe SPT + Tempo crypto payment gate           |
-| POST   | `/paid/diagrams/generate/svg`   | x402        | x402 paid generation, SVG format ($0.03)        |
-| POST   | `/paid/diagrams/generate/png`   | x402        | x402 paid generation, PNG format ($0.05)        |
-| POST   | `/paid/diagrams/generate/pdf`   | x402        | x402 paid generation, PDF format ($0.07)        |
-| GET    | `/diagrams/{diagram_id}`        | `X-API-Key` | Fetch a stored diagram                          |
-
-### Generate diagram
-
-```bash
-curl -X POST http://localhost:8000/diagrams/generate \
-  -H "X-API-Key: your-secret-api-key" \
+curl -X POST https://diagram-generation-api.vercel.app/diagrams/generate \
+  -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "flowchart for user login", "diagram_type": "mermaid", "format": "svg"}'
 ```
 
-## Stripe MPP monetization
+### Generate a diagram (paid)
 
-This project now includes a lightweight Node MPP gateway that exposes the protocol-native payment challenge your customer-facing client can use.
-
-1. Create a Stripe profile in the Dashboard and set `STRIPE_PROFILE_ID`.
-2. Set `STRIPE_SECRET_KEY` to either your sandbox or live secret key.
-3. Optionally set `TEMPO_DEPOSIT_ADDRESS` to a fixed Tempo address. If omitted, the Stripe MPP service can create or fetch one automatically.
-4. Start the gateway:
+Paid endpoints use [Stripe MPP](https://docs.stripe.com/payments/machine/mpp) for machine-to-machine payments. When called without a valid credential, the API returns a `402 Payment Required` with a `WWW-Authenticate: Payment` challenge the client uses to complete payment via Stripe.
 
 ```bash
-npm install
-npm run mpp:dev
+curl -X POST https://diagram-generation-api.vercel.app/paid/diagrams/generate/svg \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "a database schema", "diagram_type": "mermaid"}'
+# Returns: 402 Payment Required + WWW-Authenticate: Payment challenge
 ```
 
-5. Validate the gateway:
+---
 
-```bash
-npx mppx@latest validate http://localhost:4242
-```
+## Payment — Stripe MPP
 
-The gateway exposes `/paid` and returns a `402` challenge with both Stripe SPT and Tempo options until the client completes payment. The example pricing is:
+This API uses the [Stripe Machine Payment Protocol (MPP)](https://docs.stripe.com/payments/machine/mpp) to gate paid endpoints. Clients pay using Stripe SPTs (fiat) without any manual checkout flow.
 
-- Tempo: `0.01` USD-equivalent
-- Stripe SPT: `0.50` USD
+### Pricing
 
-Use sandbox keys for local validation and live keys only after you have verified the flow in test mode.
+| Format | Price |
+|--------|-------|
+| SVG | $0.05 |
+| PNG | $0.07 |
+
+### How it works
+
+1. Client calls `POST /paid/diagrams/generate/svg` (or `/png`)
+2. API returns `402 Payment Required` with a signed Stripe MPP challenge
+3. Client completes payment using a Stripe MPP-compatible SDK
+4. Client retries the request with the payment credential in the `Authorization` header
+5. API validates the credential and returns the rendered diagram
+
+### Required environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `STRIPE_SECRET_KEY` | Your Stripe live or test secret key |
+| `STRIPE_PROFILE_ID` | Your Stripe MPP profile ID |
+| `TEMPO_DEPOSIT_ADDRESS` | Your Stripe-generated Tempo deposit address |
+
+---
 
 ## Environment variables
 
-See [.env.example](.env.example).
+See [.env.example](.env.example) for the full list.
 
-Optional override:
+### Minimum required (Vercel)
 
-- `MERMAID_INK_BASE_URL` (default: `https://mermaid.ink`)
-- `BASE_APP_ID` (adds `<meta name="base:app_id" ...>` to `/` for Base domain verification)
+| Variable | Description |
+|----------|-------------|
+| `API_KEY` | Secret key for `X-API-Key` header on free endpoints |
+| `OPENAI_API_KEY` | OpenAI API key for diagram source generation |
+| `DATABASE_URL` | PostgreSQL connection string (or `sqlite+aiosqlite:////tmp/test.db` for quickstart) |
+| `STRIPE_SECRET_KEY` | Stripe secret key for MPP payment gating |
+| `STRIPE_PROFILE_ID` | Stripe MPP profile ID |
 
-x402 seller mode (Base Builder Code attribution):
+### Optional
 
-- `X402_ENABLED=true`
-- `X402_FACILITATOR_URL` (default: `https://x402.org/facilitator`)
-- `X402_NETWORK` (default: `eip155:84532` for Base Sepolia testnet)
-- `X402_PAY_TO` (wallet that receives payment)
-- `X402_PRICE_SVG` (default: `$0.03`)
-- `X402_PRICE_PNG` (default: `$0.05`)
-- `X402_PRICE_PDF` (default: `$0.07`)
-- `X402_BUILDER_CODE` (example: `bc_b7k3p9da`, optional — attribution only, not required for settlement)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KROKI_BASE_URL` | `https://kroki.io` | Kroki rendering service URL |
+| `MERMAID_INK_BASE_URL` | `https://mermaid.ink` | Fallback renderer for Mermaid |
+| `REDIS_URL` | `redis://localhost:6379` | Redis for response caching |
+| `BASE_APP_ID` | — | Adds `<meta name="base:app_id">` to `/` for Base domain verification |
 
-When enabled, each format has its own paid route so the x402 payment
-challenge can quote the correct price before the request body is read:
+---
 
-- `POST /paid/diagrams/generate/svg`
-- `POST /paid/diagrams/generate/png`
-- `POST /paid/diagrams/generate/pdf`
+## Deployment
 
-The `format` field in the request body is optional on these routes — the
-path segment always determines the rendered format and price.
+### Vercel (recommended)
 
-For Base mainnet production, use:
+1. Connect this repo to Vercel
+2. Set the required environment variables in **Settings → Environment Variables**
+3. Vercel auto-deploys on every push to `main`
+4. Verify with: `curl https://your-deployment.vercel.app/health`
 
-- `X402_FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402`
-- `X402_NETWORK=eip155:8453`
-- `CDP_API_KEY_ID=organizations/.../apiKeys/...`
-- `CDP_API_KEY_SECRET=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----`
+### Release flow
 
-`CDP_API_KEY_SECRET` may be pasted with escaped `\n` newlines (recommended for env vars).
+1. Push changes to a feature branch
+2. Open a PR → merge to `main`
+3. Vercel auto-deploys `main`
+4. Confirm `/health` returns `{"status": "ok"}`
 
-Get your real Builder Code at:
+---
 
-- https://dashboard.base.org → log in → select your app → **Settings → Builder Codes**
-
-x402 buyer payment test (to verify you can receive settled payments):
-
-1. Set buyer env vars in `.env`:
-   - `X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate/svg`
-   - `EVM_PRIVATE_KEY=0x...` (funded buyer wallet key)
-   - `X402_TEST_FORMAT=svg` (optional, defaults to `svg`; use `png` or `pdf` to test other prices — must match the endpoint path)
-2. Run:
-   - `.\.venv\Scripts\python.exe scripts\x402_buyer_payment_test.py`
-3. Success criteria:
-   - script prints `status 200`
-   - script prints `payment_settled ...`
-
-For testnet settlement (x402.org facilitator), buyer wallet must be funded on Base Sepolia with:
-- testnet USDC (asset in the 402 challenge)
-- enough ETH for gas/approval flow
-
-## Deployment + migration notes (important)
-
-### 1. Ensure old code is fully replaced in production
-
-Use this release flow every time:
-
-1. Push feature branch updates.
-2. Merge/push latest commit to `main`.
-3. Confirm Vercel production is deploying `main` (not an older branch).
-4. Redeploy and verify `/health` returns `200`.
-
-If Vercel points to an old branch or old commit, you can still get startup errors
-even when local code is fixed.
-
-### 2. SQLite path behavior and `test.db`
-
-The API now auto-normalizes SQLite paths on Vercel:
-
-- Local/dev default fallback: `sqlite+aiosqlite:///./test.db`
-- Vercel runtime fallback: `sqlite+aiosqlite:////tmp/test.db`
-
-Why: Vercel's `/var/task` is read-only at runtime, but `/tmp` is writable.
-
-### 3. When you should change `test.db`
-
-Usually, you do **not** need to rename it.
-
-Change the DB path only when:
-
-- You want a different local filename, or
-- You migrate to managed Postgres and set a real `DATABASE_URL`.
-
-For production, preferred setup is managed Postgres (`postgresql+asyncpg://...`)
-instead of SQLite.
-
-### 4. Vercel environment minimum
-
-At minimum set:
-
-- `API_KEY`
-- `OPENAI_API_KEY`
-- `DATABASE_URL` (quickstart: `sqlite+aiosqlite:////tmp/test.db`)
-
-If `X402_ENABLED=true`, also set all required x402 vars:
-
-- `X402_FACILITATOR_URL`
-- `X402_NETWORK`
-- `X402_PAY_TO`
-- `X402_PRICE_SVG`
-- `X402_PRICE_PNG`
-- `X402_PRICE_PDF`
-- `X402_BUILDER_CODE`
-
-If `X402_FACILITATOR_URL` uses `api.cdp.coinbase.com`, also set:
-
-- `CDP_API_KEY_ID`
-- `CDP_API_KEY_SECRET`
-
-## Visual preview in VS Code (Simple Browser)
+## Visual preview (VS Code)
 
 1. Run the API: `uvicorn app.main:app --reload`
 2. In VS Code: `Ctrl+Shift+P` → **Simple Browser: Show**
 3. Enter: `http://127.0.0.1:8000/visualizer`
-4. Paste your API key, choose type/format, enter text prompt, click **Generate**
+4. Paste your API key, choose type and format, enter a prompt, click **Generate**
+
