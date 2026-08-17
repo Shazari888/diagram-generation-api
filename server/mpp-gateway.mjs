@@ -32,9 +32,8 @@ const mppx = Mppx.create({
 
 // Per-route pricing in USD. Only known diagram endpoints are allowed.
 const PRICING = {
-  '/diagrams/generate/svg': '0.03',
-  '/diagrams/generate/png': '0.05',
-  '/diagrams/generate/pdf': '0.07',
+  '/diagrams/generate/svg': '0.05',
+  '/diagrams/generate/png': '0.07',
 };
 
 function getRouteAmount(pathname) {

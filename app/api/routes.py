@@ -263,15 +263,6 @@ async def generate_diagram_paid_png(
     return await _generate_diagram(body, session)
 
 
-@router.post("/paid/diagrams/generate/pdf", response_model=GenerateDiagramResponse)
-async def generate_diagram_paid_pdf(
-    body: GenerateDiagramRequest,
-    session: AsyncSession = Depends(db.get_session),
-) -> GenerateDiagramResponse:
-    body.format = "pdf"
-    return await _generate_diagram(body, session)
-
-
 @router.get("/diagrams/{diagram_id}", response_model=DiagramResponse)
 async def get_diagram(
     diagram_id: UUID,

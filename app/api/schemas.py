@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class GenerateDiagramRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
     diagram_type: str = Field(default="mermaid", pattern="^(mermaid|d2|plantuml|graphviz)$")
-    format: str = Field(default="svg", pattern="^(svg|png|pdf)$")
+    format: str = Field(default="svg", pattern="^(svg|png)$")
 
 
 class DiagramResponse(BaseModel):

@@ -25,9 +25,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 ROUTE_PRICING: dict[str, int] = {
-    "/paid/diagrams/generate/svg": 3,    # $0.03 in cents
-    "/paid/diagrams/generate/png": 5,    # $0.05 in cents
-    "/paid/diagrams/generate/pdf": 7,    # $0.07 in cents
+    "/paid/diagrams/generate/svg": 5,    # $0.05 in cents
+    "/paid/diagrams/generate/png": 7,    # $0.07 in cents
 }
 
 _SCHEME = "Payment"
