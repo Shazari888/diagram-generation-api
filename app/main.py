@@ -107,7 +107,6 @@ if settings.x402_enabled:
     _format_prices = {
         "svg": settings.x402_price_svg,
         "png": settings.x402_price_png,
-        "pdf": settings.x402_price_pdf,
     }
 
     x402_routes = {
