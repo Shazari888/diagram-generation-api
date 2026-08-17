@@ -27,8 +27,16 @@ class Settings(BaseSettings):
     x402_facilitator_url: str = "https://x402.org/facilitator"
     x402_network: str = "eip155:84532"
     x402_pay_to: str | None = None
-    x402_price: str = "$0.01"
+    x402_price_svg: str = "$0.03"
+    x402_price_png: str = "$0.05"
+    x402_price_pdf: str = "$0.07"
     x402_builder_code: str | None = None
+    cdp_api_key_id: str | None = None
+    cdp_api_key_secret: str | None = None
+
+    # Stripe MPP
+    stripe_secret_key: str | None = None
+    stripe_profile_id: str | None = None
 
 
 settings = Settings()

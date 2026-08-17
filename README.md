@@ -32,19 +32,31 @@ cp .env.example .env     # then fill in values
 
 ## Run
 
+Python API:
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
+MPP gateway (for Stripe SPTs and Tempo crypto):
+
+```bash
+npm install
+npm run mpp:dev
+```
+
 ## API
 
-| Method | Path                     | Auth        | Description                                     |
-| ------ | ------------------------ | ----------- | ----------------------------------------------- |
-| GET    | `/health`                | No          | Liveness check                                  |
-| GET    | `/visualizer`            | No          | Browser UI to test prompts and preview diagrams |
-| POST   | `/diagrams/generate`     | `X-API-Key` | Generate and store a diagram                    |
-| POST   | `/paid/diagrams/generate`| x402        | x402 paid generation endpoint                   |
-| GET    | `/diagrams/{diagram_id}` | `X-API-Key` | Fetch a stored diagram                          |
+| Method | Path                            | Auth        | Description                                     |
+| ------ | ------------------------------- | ----------- | ------------------------------------------------ |
+| GET    | `/health`                       | No          | Liveness check                                  |
+| GET    | `/visualizer`                   | No          | Browser UI to test prompts and preview diagrams |
+| POST   | `/diagrams/generate`            | `X-API-Key` | Generate and store a diagram                    |
+| POST   | `/paid`                         | MPP         | Stripe SPT + Tempo crypto payment gate           |
+| POST   | `/paid/diagrams/generate/svg`   | x402        | x402 paid generation, SVG format ($0.03)        |
+| POST   | `/paid/diagrams/generate/png`   | x402        | x402 paid generation, PNG format ($0.05)        |
+| POST   | `/paid/diagrams/generate/pdf`   | x402        | x402 paid generation, PDF format ($0.07)        |
+| GET    | `/diagrams/{diagram_id}`        | `X-API-Key` | Fetch a stored diagram                          |
 
 ### Generate diagram
 
@@ -54,6 +66,33 @@ curl -X POST http://localhost:8000/diagrams/generate \
   -H "Content-Type: application/json" \
   -d '{"prompt": "flowchart for user login", "diagram_type": "mermaid", "format": "svg"}'
 ```
+
+## Stripe MPP monetization
+
+This project now includes a lightweight Node MPP gateway that exposes the protocol-native payment challenge your customer-facing client can use.
+
+1. Create a Stripe profile in the Dashboard and set `STRIPE_PROFILE_ID`.
+2. Set `STRIPE_SECRET_KEY` to either your sandbox or live secret key.
+3. Optionally set `TEMPO_DEPOSIT_ADDRESS` to a fixed Tempo address. If omitted, the Stripe MPP service can create or fetch one automatically.
+4. Start the gateway:
+
+```bash
+npm install
+npm run mpp:dev
+```
+
+5. Validate the gateway:
+
+```bash
+npx mppx@latest validate http://localhost:4242
+```
+
+The gateway exposes `/paid` and returns a `402` challenge with both Stripe SPT and Tempo options until the client completes payment. The example pricing is:
+
+- Tempo: `0.01` USD-equivalent
+- Stripe SPT: `0.50` USD
+
+Use sandbox keys for local validation and live keys only after you have verified the flow in test mode.
 
 ## Environment variables
 
@@ -70,16 +109,29 @@ x402 seller mode (Base Builder Code attribution):
 - `X402_FACILITATOR_URL` (default: `https://x402.org/facilitator`)
 - `X402_NETWORK` (default: `eip155:84532` for Base Sepolia testnet)
 - `X402_PAY_TO` (wallet that receives payment)
-- `X402_PRICE` (example: `$0.01`)
-- `X402_BUILDER_CODE` (example: `bc_b7k3p9da`)
+- `X402_PRICE_SVG` (default: `$0.03`)
+- `X402_PRICE_PNG` (default: `$0.05`)
+- `X402_PRICE_PDF` (default: `$0.07`)
+- `X402_BUILDER_CODE` (example: `bc_b7k3p9da`, optional — attribution only, not required for settlement)
 
-When enabled, `POST /paid/diagrams/generate` is payment-gated by x402 and
-declares your Builder Code on the route for seller-side attribution.
+When enabled, each format has its own paid route so the x402 payment
+challenge can quote the correct price before the request body is read:
+
+- `POST /paid/diagrams/generate/svg`
+- `POST /paid/diagrams/generate/png`
+- `POST /paid/diagrams/generate/pdf`
+
+The `format` field in the request body is optional on these routes — the
+path segment always determines the rendered format and price.
 
 For Base mainnet production, use:
 
 - `X402_FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402`
 - `X402_NETWORK=eip155:8453`
+- `CDP_API_KEY_ID=organizations/.../apiKeys/...`
+- `CDP_API_KEY_SECRET=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----`
+
+`CDP_API_KEY_SECRET` may be pasted with escaped `\n` newlines (recommended for env vars).
 
 Get your real Builder Code at:
 
@@ -88,8 +140,9 @@ Get your real Builder Code at:
 x402 buyer payment test (to verify you can receive settled payments):
 
 1. Set buyer env vars in `.env`:
-   - `X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate`
+   - `X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate/svg`
    - `EVM_PRIVATE_KEY=0x...` (funded buyer wallet key)
+   - `X402_TEST_FORMAT=svg` (optional, defaults to `svg`; use `png` or `pdf` to test other prices — must match the endpoint path)
 2. Run:
    - `.\.venv\Scripts\python.exe scripts\x402_buyer_payment_test.py`
 3. Success criteria:
@@ -148,8 +201,15 @@ If `X402_ENABLED=true`, also set all required x402 vars:
 - `X402_FACILITATOR_URL`
 - `X402_NETWORK`
 - `X402_PAY_TO`
-- `X402_PRICE`
+- `X402_PRICE_SVG`
+- `X402_PRICE_PNG`
+- `X402_PRICE_PDF`
 - `X402_BUILDER_CODE`
+
+If `X402_FACILITATOR_URL` uses `api.cdp.coinbase.com`, also set:
+
+- `CDP_API_KEY_ID`
+- `CDP_API_KEY_SECRET`
 
 ## Visual preview in VS Code (Simple Browser)
 

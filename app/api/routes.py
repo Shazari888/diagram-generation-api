@@ -245,11 +245,30 @@ async def generate_diagram(
     return await _generate_diagram(body, session)
 
 
-@router.post("/paid/diagrams/generate", response_model=GenerateDiagramResponse)
-async def generate_diagram_paid(
+@router.post("/paid/diagrams/generate/svg", response_model=GenerateDiagramResponse)
+async def generate_diagram_paid_svg(
     body: GenerateDiagramRequest,
     session: AsyncSession = Depends(db.get_session),
 ) -> GenerateDiagramResponse:
+    body.format = "svg"
+    return await _generate_diagram(body, session)
+
+
+@router.post("/paid/diagrams/generate/png", response_model=GenerateDiagramResponse)
+async def generate_diagram_paid_png(
+    body: GenerateDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+) -> GenerateDiagramResponse:
+    body.format = "png"
+    return await _generate_diagram(body, session)
+
+
+@router.post("/paid/diagrams/generate/pdf", response_model=GenerateDiagramResponse)
+async def generate_diagram_paid_pdf(
+    body: GenerateDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+) -> GenerateDiagramResponse:
+    body.format = "pdf"
     return await _generate_diagram(body, session)
 
 

@@ -22,6 +22,7 @@ async def main() -> None:
     load_dotenv()
     endpoint = _required_env("X402_PAID_ENDPOINT_URL")
     private_key = _required_env("EVM_PRIVATE_KEY")
+    diagram_format = os.getenv("X402_TEST_FORMAT", "svg").strip() or "svg"
 
     account = Account.from_key(private_key)
     signer = EthAccountSigner(account)
@@ -33,7 +34,7 @@ async def main() -> None:
     request_body = {
         "prompt": "Create a paid login flow chart",
         "diagram_type": "mermaid",
-        "format": "svg",
+        "format": diagram_format,
     }
 
     async with x402HttpxClient(client, timeout=90.0) as http:
