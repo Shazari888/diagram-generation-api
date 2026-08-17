@@ -11,6 +11,7 @@ from x402.mechanisms.evm.exact import ExactEvmServerScheme
 
 from app.api.routes import router
 from app.config import settings
+from app.mpp import StripeMppMiddleware
 from app.services import cache, db
 
 
@@ -24,6 +25,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(router)
+
+# Stripe MPP payment gating for /paid/diagrams/generate/*
+if settings.stripe_secret_key and settings.stripe_profile_id:
+    app.add_middleware(
+        StripeMppMiddleware,
+        stripe_secret_key=settings.stripe_secret_key,
+        stripe_profile_id=settings.stripe_profile_id,
+    )
 
 
 def _build_cdp_facilitator_config() -> dict[str, object]:
