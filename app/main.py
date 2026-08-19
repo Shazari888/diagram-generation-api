@@ -88,11 +88,11 @@ if settings.x402_enabled:
         settings.x402_network, ExactEvmServerScheme()
     )
 
-    route_extensions = (
-        declare_builder_code_extension(settings.x402_builder_code)
-        if settings.x402_builder_code
-        else None
-    )
+    # Builder-code extensions are intentionally disabled. The x402 SDK rejects
+    # the signed exact-evm payload when this extension is included, so the
+    # payment signature becomes invalid even though the challenge is otherwise
+    # correct.
+    route_extensions = None
 
     _format_prices = {
         "svg": settings.x402_price_svg,
