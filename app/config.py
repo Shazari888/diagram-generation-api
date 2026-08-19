@@ -33,9 +33,8 @@ class Settings(BaseSettings):
     cdp_api_key_id: str | None = None
     cdp_api_key_secret: str | None = None
 
-    # Stripe MPP
-    stripe_secret_key: str | None = None
-    stripe_profile_id: str | None = None
+    # Deprecated legacy config retained for older local experiments.
+    # The active app is x402-only and does not require Stripe settings.
 
 
 settings = Settings()

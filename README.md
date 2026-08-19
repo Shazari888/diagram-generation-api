@@ -1,6 +1,14 @@
 # Diagram Generation API
 
-AI-powered diagram generation API (FastAPI, PostgreSQL, Redis, OpenAI, Kroki).
+AI-powered diagram generation API that renders Mermaid, D2, PlantUML, and Graphviz diagrams to SVG or PNG. Paid endpoints are protected with x402 and settle on Base Sepolia using USDC.
+
+## What this API does
+
+- accepts a prompt and a diagram type
+- generates diagram source with OpenAI
+- renders the final output as SVG or PNG
+- exposes a public health check and a browser-based visualizer
+- gates paid generation routes behind x402 payment verification
 
 ## Supported diagram types
 
@@ -11,130 +19,128 @@ AI-powered diagram generation API (FastAPI, PostgreSQL, Redis, OpenAI, Kroki).
 
 ## Supported output formats
 
-- `svg` — returned as raw SVG text
-- `png` — returned as base64-encoded PNG bytes
+- `svg`
+- `png`
 
-When Kroki does not directly support a requested `diagram_type` + `format` pair, the API renders SVG first and converts to PNG automatically.
+When a renderer does not support the requested pair directly, the app renders SVG first and converts to PNG where needed.
 
-If Kroki Mermaid rendering fails due to transient issues, the API falls back to Mermaid Ink automatically.
+## Project status
 
----
+This repo is configured for the x402-only payment flow on Railway. The app no longer relies on Stripe MPP or Vercel serverless function constraints for paid generation.
 
-## Setup
+## Local setup
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-cp .env.example .env     # then fill in values
+copy .env.example .env
 ```
 
-## Run
+Then fill in the values in `.env` before running the app.
+
+## Run locally
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
----
+The app listens on `http://127.0.0.1:8000` by default.
 
-## API Routes
+## Routes
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/health` | None | Liveness check |
-| GET | `/visualizer` | None | Browser UI to test prompts and preview diagrams |
-| POST | `/paid/diagrams/generate/svg` | Stripe MPP | Payment-gated SVG generation ($0.05) |
-| POST | `/paid/diagrams/generate/png` | Stripe MPP | Payment-gated PNG generation ($0.07) |
+- `GET /health` — health check
+- `GET /visualizer` — browser visualizer for manual testing
+- `POST /paid/diagrams/generate/svg` — x402-gated SVG generation
+- `POST /paid/diagrams/generate/png` — x402-gated PNG generation
 
-### Generate a diagram (paid)
+## x402 payment model
 
-Paid endpoints use [Stripe MPP](https://docs.stripe.com/payments/machine/mpp) for machine-to-machine payments. When called without a valid credential, the API returns a `402 Payment Required` with a `WWW-Authenticate: Payment` challenge the client uses to complete payment via Stripe.
-
-```bash
-curl -X POST https://diagram-generation-api.vercel.app/paid/diagrams/generate/svg \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "a database schema", "diagram_type": "mermaid"}'
-# Returns: 402 Payment Required + WWW-Authenticate: Payment challenge
-```
-
----
-
-## Payment — Stripe MPP
-
-This API uses the [Stripe Machine Payment Protocol (MPP)](https://docs.stripe.com/payments/machine/mpp) to gate paid endpoints. Clients pay using Stripe SPTs (fiat) without any manual checkout flow.
+The paid endpoints require an x402 payment before the diagram is generated.
 
 ### Pricing
 
-| Format | Price |
-|--------|-------|
-| SVG | $0.05 |
-| PNG | $0.07 |
+- SVG: $0.05
+- PNG: $0.07
 
 ### How it works
 
-1. Client calls `POST /paid/diagrams/generate/svg` (or `/png`)
-2. API returns `402 Payment Required` with a signed Stripe MPP challenge
-3. Client completes payment using a Stripe MPP-compatible SDK
-4. Client retries the request with the payment credential in the `Authorization` header
-5. API validates the credential and returns the rendered diagram
+1. Client calls `POST /paid/diagrams/generate/svg` or `/png` without payment
+2. Server returns `402 Payment Required` with an x402 challenge
+3. Client constructs and signs the payment payload using the exact EVM scheme
+4. Client retries with `PAYMENT-SIGNATURE` in the request headers
+5. Server verifies the signature and returns the generated diagram
 
-### Required environment variables
+### Required live environment variables
 
-| Variable | Description |
-|----------|-------------|
-| `STRIPE_SECRET_KEY` | Your Stripe live or test secret key |
-| `STRIPE_PROFILE_ID` | Your Stripe MPP profile ID |
-| `TEMPO_DEPOSIT_ADDRESS` | Your Stripe-generated Tempo deposit address |
+- `X402_ENABLED=true`
+- `X402_FACILITATOR_URL=https://x402.org/facilitator`
+- `X402_NETWORK=eip155:84532`
+- `X402_PAY_TO=0xC4b867EAeeDcFCe9B794a3f791F48f82ecc1350C`
+- `X402_PRICE_SVG=$0.05`
+- `X402_PRICE_PNG=$0.07`
+- `OPENAI_API_KEY=...`
+- `DATABASE_URL=...`
+- `REDIS_URL=...`
 
----
+Note: the builder-code extension is intentionally disabled for the exact EVM signature flow because it invalidates the signed payload.
+
+## Railway deployment
+
+This repo is currently intended to run on Railway instead of Vercel because paid generation includes a real x402 verification step and can exceed Vercel Hobby time limits.
+
+### Deploy to Railway
+
+1. Create a new Railway project
+2. Import this repository from GitHub
+3. Add the environment variables from `.env.example`
+4. Deploy the project
+5. Confirm `/health` returns `{"status": "ok"}`
+
+### Example production URL
+
+```text
+https://diagram-generation-api-production.up.railway.app
+```
 
 ## Environment variables
 
-See [.env.example](.env.example) for the full list.
+See [.env.example](.env.example) for the full configuration template.
 
-### Minimum required (Vercel)
+### Required local values
 
-| Variable | Description |
-|----------|-------------|
-| `API_KEY` | Secret key for `X-API-Key` header on free endpoints |
-| `OPENAI_API_KEY` | OpenAI API key for diagram source generation |
-| `DATABASE_URL` | PostgreSQL connection string (or `sqlite+aiosqlite:////tmp/test.db` for quickstart) |
-| `STRIPE_SECRET_KEY` | Stripe secret key for MPP payment gating |
-| `STRIPE_PROFILE_ID` | Stripe MPP profile ID |
+- `API_KEY` — secret key for admin/internal endpoints
+- `OPENAI_API_KEY` — API access for diagram source generation
+- `DATABASE_URL` — Postgres or SQLite fallback
+- `REDIS_URL` — Redis connection string
+- `X402_ENABLED` — set to `true` for the paid endpoint flow
+- `X402_PAY_TO` — wallet receiving USDC payments
+- `X402_FACILITATOR_URL` — usually `https://x402.org/facilitator`
+- `X402_NETWORK` — `eip155:84532` for Base Sepolia
 
-### Optional
+### Optional values
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `KROKI_BASE_URL` | `https://kroki.io` | Kroki rendering service URL |
-| `MERMAID_INK_BASE_URL` | `https://mermaid.ink` | Fallback renderer for Mermaid |
-| `REDIS_URL` | `redis://localhost:6379` | Redis for response caching |
-| `BASE_APP_ID` | — | Adds `<meta name="base:app_id">` to `/` for Base domain verification |
+- `KROKI_BASE_URL`
+- `MERMAID_INK_BASE_URL`
+- `BASE_APP_ID`
+- `CACHE_TTL_SECONDS`
 
----
+## Local testing
 
-## Deployment
+```bash
+# health check
+curl http://127.0.0.1:8000/health
 
-### Vercel (recommended)
+# x402 buyer test
+X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate/svg \
+EVM_PRIVATE_KEY=your_private_key \
+python scripts/x402_buyer_payment_test.py
+```
 
-1. Connect this repo to Vercel
-2. Set the required environment variables in **Settings → Environment Variables**
-3. Vercel auto-deploys on every push to `main`
-4. Verify with: `curl https://your-deployment.vercel.app/health`
+## Visualizer
 
-### Release flow
-
-1. Push changes to a feature branch
-2. Open a PR → merge to `main`
-3. Vercel auto-deploys `main`
-4. Confirm `/health` returns `{"status": "ok"}`
-
----
-
-## Visual preview (VS Code)
-
-1. Run the API: `uvicorn app.main:app --reload`
-2. In VS Code: `Ctrl+Shift+P` → **Simple Browser: Show**
-3. Enter: `http://127.0.0.1:8000/visualizer`
-4. Paste your API key, choose type and format, enter a prompt, click **Generate**
+1. Run the app: `uvicorn app.main:app --reload`
+2. Open: `http://127.0.0.1:8000/visualizer`
+3. Enter your API key and prompt
+4. Generate the diagram preview
 
