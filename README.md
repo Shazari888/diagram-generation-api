@@ -74,7 +74,7 @@ The paid endpoints require an x402 payment before the diagram is generated.
 ### Required live environment variables
 
 - `X402_ENABLED=true`
-- `X402_FACILITATOR_URL=https://x402.org/facilitator`
+- `X402_FACILITATOR_URL=https://dexter.cash/facilitator/base`
 - `X402_NETWORK=eip155:84532`
 - `X402_PAY_TO=0xC4b867EAeeDcFCe9B794a3f791F48f82ecc1350C`
 - `X402_PRICE_SVG=$0.05`
@@ -143,4 +143,3 @@ python scripts/x402_buyer_payment_test.py
 2. Open: `http://127.0.0.1:8000/visualizer`
 3. Enter your API key and prompt
 4. Generate the diagram preview
-
