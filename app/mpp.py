@@ -110,10 +110,12 @@ class StripeMppMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         stripe_secret_key: str,
         stripe_profile_id: str,
+        defer_to_x402: bool = False,
     ) -> None:
         super().__init__(app)
         self._profile_id = stripe_profile_id
         self._secret_key = _make_secret_key(stripe_secret_key)
+        self._defer_to_x402 = defer_to_x402
 
     async def dispatch(
         self,
@@ -124,6 +126,14 @@ class StripeMppMiddleware(BaseHTTPMiddleware):
         method = request.method
 
         if method != "POST" or path not in ROUTE_PRICING:
+            return await call_next(request)
+
+        # If x402 is handling these routes, pass through entirely
+        if self._defer_to_x402:
+            return await call_next(request)
+
+        # If request carries an x402 X-PAYMENT header, let x402 middleware handle it
+        if request.headers.get("X-PAYMENT"):
             return await call_next(request)
 
         amount_cents = ROUTE_PRICING[path]
