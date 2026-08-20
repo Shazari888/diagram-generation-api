@@ -1,145 +1,207 @@
 # Diagram Generation API
 
-AI-powered diagram generation API that renders Mermaid, D2, PlantUML, and Graphviz diagrams to SVG or PNG. Paid endpoints are protected with x402 and settle on Base Sepolia using USDC.
+AI-powered diagram generation API that renders Mermaid, D2, PlantUML, and Graphviz diagrams to SVG or PNG. Paid endpoints are protected with [x402](https://x402.org) and settle on **Base mainnet** (`eip155:8453`) using USDC via the [Dexter facilitator](https://dexter.cash/facilitator/base).
 
 ## What this API does
 
-- accepts a prompt and a diagram type
-- generates diagram source with OpenAI
-- renders the final output as SVG or PNG
-- exposes a public health check and a browser-based visualizer
-- gates paid generation routes behind x402 payment verification
+- Accepts a natural-language prompt and a diagram type
+- Generates diagram source code with OpenAI
+- Renders the final output as SVG or PNG
+- Caches results in Redis to avoid redundant generation
+- Exposes a public health check and a browser-based visualizer
+- Gates paid generation routes behind x402 on-chain payment verification
 
 ## Supported diagram types
 
-- `mermaid`
-- `d2`
-- `plantuml`
-- `graphviz`
+| Type | Key |
+|---|---|
+| Mermaid | `mermaid` |
+| D2 | `d2` |
+| PlantUML | `plantuml` |
+| Graphviz | `graphviz` |
 
 ## Supported output formats
 
-- `svg`
-- `png`
+| Format | Notes |
+|---|---|
+| `svg` | Returned as an inline SVG string |
+| `png` | Returned as a base64-encoded PNG |
 
-When a renderer does not support the requested pair directly, the app renders SVG first and converts to PNG where needed.
+Mermaid diagrams are rendered via [mermaid.ink](https://mermaid.ink) for speed and reliability. All other diagram types use [Kroki](https://kroki.io). When a renderer does not natively support PNG, the app renders SVG first and converts.
 
-## Project status
+## Architecture
 
-This repo is configured for the x402-only payment flow on Railway. The app no longer relies on Stripe MPP or Vercel serverless function constraints for paid generation.
+```
+Client
+  └─► POST /paid/diagrams/generate/svg (or /png)
+        │
+        ├─ [no payment] ──► 402 Payment Required  ◄── x402 challenge (Dexter facilitator)
+        │
+        └─ [with PAYMENT-SIGNATURE header]
+              │
+              ├─ x402 middleware verifies signature on-chain (Base mainnet)
+              ├─ OpenAI generates diagram source from prompt
+              ├─ Renderer (mermaid.ink / Kroki) produces SVG or PNG
+              ├─ Result stored in Postgres + cached in Redis
+              └─► 200 OK  { diagram, rendered, format }
+```
+
+## Routes
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | None | Health check |
+| `GET` | `/visualizer` | None | Browser-based visualizer UI |
+| `POST` | `/paid/diagrams/generate/svg` | x402 payment | Generate SVG diagram |
+| `POST` | `/paid/diagrams/generate/png` | x402 payment | Generate PNG diagram |
+| `POST` | `/diagrams/generate` | `X-API-Key` header | Admin/internal endpoint |
+| `GET` | `/diagrams/{id}` | `X-API-Key` header | Retrieve a stored diagram |
+
+## x402 payment model
+
+The paid endpoints use the [x402 protocol](https://x402.org) with the `exact` EVM scheme on Base mainnet.
+
+### Pricing
+
+| Format | Price |
+|---|---|
+| SVG | $0.05 USDC |
+| PNG | $0.07 USDC |
+
+### Payment flow
+
+1. Client calls `POST /paid/diagrams/generate/svg` (or `/png`) — no payment yet
+2. Server returns `402 Payment Required` with an x402 challenge in the `PAYMENT-REQUIRED` header
+3. Client signs the payment payload using the `exact` EVM scheme (USDC on Base mainnet)
+4. Client retries the same request with the signed `PAYMENT-SIGNATURE` header
+5. Server verifies the signature via the Dexter facilitator on Base mainnet
+6. Diagram is generated and returned
+
+### Facilitator
+
+- **URL:** `https://x402.dexter.cash`
+- **Network:** `eip155:8453` (Base mainnet)
+- **Asset:** USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
+
+> **Note:** The builder-code extension (`X402_BUILDER_CODE`) must be left blank. Including it invalidates the signed payload and causes signature verification to fail.
 
 ## Local setup
 
+### Prerequisites
+
+- Python 3.11+
+- A running PostgreSQL instance (or SQLite for local dev)
+- A running Redis instance
+- An OpenAI API key
+- An EVM wallet with USDC on Base mainnet (for buyer testing)
+
+### Install
+
 ```bash
 python -m venv .venv
-.venv\Scripts\activate   # Windows
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
-copy .env.example .env
+copy .env.example .env   # Windows
+# cp .env.example .env   # macOS/Linux
 ```
 
-Then fill in the values in `.env` before running the app.
+Fill in all values in `.env` before running.
 
-## Run locally
+### Run locally
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The app listens on `http://127.0.0.1:8000` by default.
+App listens on `http://127.0.0.1:8000` by default.
 
-## Routes
+### Local x402 buyer test
 
-- `GET /health` — health check
-- `GET /visualizer` — browser visualizer for manual testing
-- `POST /paid/diagrams/generate/svg` — x402-gated SVG generation
-- `POST /paid/diagrams/generate/png` — x402-gated PNG generation
+```bash
+# Set your buyer wallet key and target endpoint
+EVM_PRIVATE_KEY=0xyour_buyer_private_key \
+X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate/svg \
+python scripts/x402_buyer_payment_test.py
+```
 
-## x402 payment model
-
-The paid endpoints require an x402 payment before the diagram is generated.
-
-### Pricing
-
-- SVG: $0.05
-- PNG: $0.07
-
-### How it works
-
-1. Client calls `POST /paid/diagrams/generate/svg` or `/png` without payment
-2. Server returns `402 Payment Required` with an x402 challenge
-3. Client constructs and signs the payment payload using the exact EVM scheme
-4. Client retries with `PAYMENT-SIGNATURE` in the request headers
-5. Server verifies the signature and returns the generated diagram
-
-### Required live environment variables
-
-- `X402_ENABLED=true`
-- `X402_FACILITATOR_URL=https://dexter.cash/facilitator/base`
-- `X402_NETWORK=eip155:84532`
-- `X402_PAY_TO=0xC4b867EAeeDcFCe9B794a3f791F48f82ecc1350C`
-- `X402_PRICE_SVG=$0.05`
-- `X402_PRICE_PNG=$0.07`
-- `OPENAI_API_KEY=...`
-- `DATABASE_URL=...`
-- `REDIS_URL=...`
-
-Note: the builder-code extension is intentionally disabled for the exact EVM signature flow because it invalidates the signed payload.
+> The buyer key must be different from the seller wallet (`X402_PAY_TO`). The buyer wallet needs USDC on Base mainnet.
 
 ## Railway deployment
 
-This repo is currently intended to run on Railway instead of Vercel because paid generation includes a real x402 verification step and can exceed Vercel Hobby time limits.
+The app runs on [Railway](https://railway.app). Vercel Hobby is not suitable because x402 payment verification + diagram generation can take longer than the 10-second serverless function limit.
 
-### Deploy to Railway
+### Deploy steps
 
-1. Create a new Railway project
-2. Import this repository from GitHub
-3. Add the environment variables from `.env.example`
-4. Deploy the project
-5. Confirm `/health` returns `{"status": "ok"}`
+1. **Create a new Railway project** and connect this GitHub repository
+2. **Add a Postgres service** — copy the `DATABASE_URL` into your environment variables
+3. **Add a Redis service** — copy the `REDIS_URL` into your environment variables
+4. **Set all environment variables** from the table below
+5. **Deploy** — Railway will build from the `Dockerfile` automatically
+6. **Confirm** — `GET /health` should return `{"status": "ok"}`
 
-### Example production URL
+### Required Railway environment variables
 
-```text
+| Variable | Value |
+|---|---|
+| `API_KEY` | Any strong secret string |
+| `OPENAI_API_KEY` | Your OpenAI key |
+| `DATABASE_URL` | Postgres connection string (Railway provides this) |
+| `REDIS_URL` | Redis connection string (Railway provides this) |
+| `X402_ENABLED` | `true` |
+| `X402_FACILITATOR_URL` | `https://x402.dexter.cash` |
+| `X402_NETWORK` | `eip155:8453` |
+| `X402_PAY_TO` | Your seller wallet address (receives USDC) |
+| `X402_PRICE_SVG` | `$0.05` |
+| `X402_PRICE_PNG` | `$0.07` |
+| `X402_BUILDER_CODE` | *(leave blank)* |
+
+### Optional Railway environment variables
+
+| Variable | Default | Notes |
+|---|---|---|
+| `OPENAI_MODEL` | `gpt-3.5-turbo` | Use `gpt-4` for better diagram quality |
+| `KROKI_BASE_URL` | `https://kroki.io` | Override to self-hosted Kroki instance |
+| `MERMAID_INK_BASE_URL` | `https://mermaid.ink` | Override to self-hosted mermaid.ink |
+| `CACHE_TTL_SECONDS` | `3600` | Redis cache TTL in seconds |
+| `BASE_APP_ID` | *(unset)* | Coinbase Base app verification meta tag |
+
+### Live URL
+
+```
 https://diagram-generation-api-production.up.railway.app
 ```
 
-## Environment variables
-
-See [.env.example](.env.example) for the full configuration template.
-
-### Required local values
-
-- `API_KEY` — secret key for admin/internal endpoints
-- `OPENAI_API_KEY` — API access for diagram source generation
-- `DATABASE_URL` — Postgres or SQLite fallback
-- `REDIS_URL` — Redis connection string
-- `X402_ENABLED` — set to `true` for the paid endpoint flow
-- `X402_PAY_TO` — wallet receiving USDC payments
-- `X402_FACILITATOR_URL` — usually `https://x402.org/facilitator`
-- `X402_NETWORK` — `eip155:84532` for Base Sepolia
-
-### Optional values
-
-- `KROKI_BASE_URL`
-- `MERMAID_INK_BASE_URL`
-- `BASE_APP_ID`
-- `CACHE_TTL_SECONDS`
-
-## Local testing
+### Health check
 
 ```bash
-# health check
-curl http://127.0.0.1:8000/health
-
-# x402 buyer test
-X402_PAID_ENDPOINT_URL=http://127.0.0.1:8000/paid/diagrams/generate/svg \
-EVM_PRIVATE_KEY=your_private_key \
-python scripts/x402_buyer_payment_test.py
+curl https://diagram-generation-api-production.up.railway.app/health
+# {"status":"ok"}
 ```
+
+## Rendering pipeline
+
+| Diagram type | SVG renderer | PNG renderer |
+|---|---|---|
+| `mermaid` | mermaid.ink (primary) → Kroki (fallback) | mermaid.ink → convert |
+| `d2` | Kroki | Kroki |
+| `plantuml` | Kroki | Kroki |
+| `graphviz` | Kroki | Kroki |
+
+Mermaid diagrams go to mermaid.ink first because Kroki's mermaid renderer requires a headless Chromium browser, which is unreliable on shared cloud infrastructure and causes long timeouts. mermaid.ink handles this in ~1–3 seconds.
 
 ## Visualizer
 
 1. Run the app: `uvicorn app.main:app --reload`
 2. Open: `http://127.0.0.1:8000/visualizer`
-3. Enter your API key and prompt
-4. Generate the diagram preview
+3. Enter your API key and a prompt
+4. Select diagram type and format
+5. Click **Generate** to preview the result
+
+## Environment variable reference
+
+See [`.env.example`](.env.example) for the full configuration template with all variable names and example values.
+
