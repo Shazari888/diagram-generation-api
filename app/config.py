@@ -34,10 +34,12 @@ class Settings(BaseSettings):
     cdp_api_key_secret: str | None = None
 
     # Security
-    enforce_https: bool = False  # Set True in production (Railway sets X-Forwarded-Proto)
-    rate_limit_paid: str = "20/minute"   # per-IP limit on paid generation endpoints
-    rate_limit_global: str = "60/minute" # per-IP limit on all other endpoints
-    use_llm_fallback: bool = False       # Set True only for local dev without a real OpenAI key
+    enforce_https: bool = False
+    rate_limit_paid: str = "20/minute"
+    rate_limit_global: str = "60/minute"
+    use_llm_fallback: bool = False
+    admin_ip_allowlist: str = ""        # Comma-separated IPs allowed to hit admin routes; empty = no restriction
+    cors_allowed_origins: str = ""      # Comma-separated allowed origins; empty = block all cross-origin
 
     # Deprecated legacy config retained for older local experiments.
     # The active app is x402-only and does not require Stripe settings.

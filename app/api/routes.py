@@ -14,7 +14,7 @@ from app.api.schemas import (
 )
 from app.auth import verify_api_key
 from app.config import settings
-from app.security import limiter
+from app.security import audit, check_admin_ip, limiter
 from app.services import cache, db, llm, renderer
 
 log = logging.getLogger(__name__)
@@ -243,13 +243,18 @@ async def _generate_diagram(
 @router.post(
     "/diagrams/generate",
     response_model=GenerateDiagramResponse,
-    include_in_schema=False,  # Admin-only endpoint, not publicly documented
+    include_in_schema=False,
 )
 async def generate_diagram(
+    request: Request,
     body: GenerateDiagramRequest,
     session: AsyncSession = Depends(db.get_session),
     _: str = Depends(verify_api_key),
 ) -> GenerateDiagramResponse:
+    if not check_admin_ip(request):
+        audit("admin.ip_blocked", request)
+        raise HTTPException(status_code=403, detail="Forbidden")
+    audit("admin.generate", request)
     return await _generate_diagram(body, session)
 
 
@@ -278,13 +283,18 @@ async def generate_diagram_paid_png(
 @router.get(
     "/diagrams/{diagram_id}",
     response_model=DiagramResponse,
-    include_in_schema=False,  # Admin-only endpoint, not publicly documented
+    include_in_schema=False,
 )
 async def get_diagram(
     diagram_id: UUID,
+    request: Request,
     session: AsyncSession = Depends(db.get_session),
     _: str = Depends(verify_api_key),
 ) -> DiagramResponse:
+    if not check_admin_ip(request):
+        audit("admin.ip_blocked", request)
+        raise HTTPException(status_code=403, detail="Forbidden")
+    audit("admin.get_diagram", request, diagram_id=str(diagram_id))
     diagram = await db.get_diagram(session, diagram_id)
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")

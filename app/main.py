@@ -1,9 +1,9 @@
-from contextlib import asynccontextmanager
+﻿from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from x402 import x402ResourceServer
@@ -15,10 +15,15 @@ from x402.mechanisms.evm.exact import ExactEvmServerScheme
 from app.api.routes import router
 from app.config import settings
 from app.security import (
+    audit,
+    body_size_limit_middleware,
     https_redirect_middleware,
     install_log_filter,
     limiter,
     record_payment_failure,
+    request_id_middleware,
+    security_headers_middleware,
+    validate_secrets,
 )
 from app.services import cache, db
 
@@ -27,6 +32,7 @@ install_log_filter()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_secrets()
     await db.init_db()
     await cache.connect()
     yield
@@ -35,15 +41,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
-# Rate limiter state
+# CORS — explicit allowlist only; empty string blocks all cross-origin requests
+_cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Request-ID", "PAYMENT-SIGNATURE"],
+)
+
+# Rate limiter
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
+
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
 
+
 app.include_router(router)
+
 
 def _build_cdp_facilitator_config() -> dict[str, object]:
     if not settings.cdp_api_key_id or not settings.cdp_api_key_secret:
@@ -66,29 +85,11 @@ def _build_cdp_facilitator_config() -> dict[str, object]:
 
     key_secret = settings.cdp_api_key_secret.replace("\\n", "\n")
 
-    def _jwt_for(method: str, path: str) -> str:
-        return generate_jwt(
-            JwtOptions(
-                api_key_id=settings.cdp_api_key_id,
-                api_key_secret=key_secret,
-                request_method=method,
-                request_host=request_host,
-                request_path=path,
-                expires_in=120,
-            )
-        )
-
     def _create_headers() -> dict[str, dict[str, str]]:
         return {
-            "supported": {
-                "Authorization": f"Bearer {_jwt_for('GET', f'{base_path}/supported')}"
-            },
-            "verify": {
-                "Authorization": f"Bearer {_jwt_for('POST', f'{base_path}/verify')}"
-            },
-            "settle": {
-                "Authorization": f"Bearer {_jwt_for('POST', f'{base_path}/settle')}"
-            },
+            "supported": {"Authorization": f"Bearer {generate_jwt(JwtOptions(api_key_id=settings.cdp_api_key_id, api_key_secret=key_secret, request_method='GET', request_host=request_host, request_path=f'{base_path}/supported', expires_in=120))}"},
+            "verify":    {"Authorization": f"Bearer {generate_jwt(JwtOptions(api_key_id=settings.cdp_api_key_id, api_key_secret=key_secret, request_method='POST', request_host=request_host, request_path=f'{base_path}/verify', expires_in=120))}"},
+            "settle":    {"Authorization": f"Bearer {generate_jwt(JwtOptions(api_key_id=settings.cdp_api_key_id, api_key_secret=key_secret, request_method='POST', request_host=request_host, request_path=f'{base_path}/settle', expires_in=120))}"},
         }
 
     return {"url": settings.x402_facilitator_url, "create_headers": _create_headers}
@@ -108,8 +109,6 @@ if settings.x402_enabled:
         settings.x402_network, ExactEvmServerScheme()
     )
 
-    route_extensions = None
-
     _format_prices = {
         "svg": settings.x402_price_svg,
         "png": settings.x402_price_png,
@@ -125,7 +124,6 @@ if settings.x402_enabled:
             ),
             description=f"Generate and store a diagram ({fmt} format)",
             mime_type="application/json",
-            **({"extensions": route_extensions} if route_extensions else {}),
         )
         for fmt, price in _format_prices.items()
     }
@@ -137,21 +135,57 @@ if settings.x402_enabled:
     async def x402_http_middleware(request: Request, call_next):
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
 
-        # Rate-limit paid endpoints before x402 even issues a challenge
         if request.method == "POST" and request.url.path in _PAID_PATHS:
+            # Idempotency: if client sends X-Idempotency-Key, return cached result for duplicates
+            idem_key = request.headers.get("x-idempotency-key")
+            if idem_key:
+                from app.services.cache import get_cached, set_cached
+                cached = await get_cached("idem", {"key": idem_key, "path": request.url.path})
+                if cached:
+                    audit("payment.idempotent_replay", request, idem_key=idem_key[:16])
+                    import json
+                    from fastapi.responses import JSONResponse as _JSONResponse
+                    return _JSONResponse(content=json.loads(cached))
+
+            # Rate limit: 20 requests per IP per 60 seconds
             from app.services.cache import increment_counter
             count = await increment_counter(f"ratelimit:paid:{client_ip}", 60)
             if count > 20:
-                from fastapi.responses import JSONResponse
+                audit("rate_limit.exceeded", request)
                 return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
 
         response = await _x402_middleware(request, call_next)
+
         if response.status_code == 402:
             record_payment_failure(client_ip, request.url.path)
+            audit("payment.challenge_issued", request)
+        elif response.status_code == 200 and request.url.path in _PAID_PATHS:
+            audit("payment.verified_success", request)
+            # Store idempotency result
+            idem_key = request.headers.get("x-idempotency-key")
+            if idem_key:
+                from app.services.cache import set_cached
+                # Read body from response for caching - store only on success
+                # Note: response body streaming means we log success but skip body cache here;
+                # full idempotency body caching requires response buffering (out of scope).
+                pass
+
         return response
 
 
-# HTTPS enforcement — outermost layer, registered after x402 so it runs first
+# Security + utility middleware — registered last so they run outermost (first in, last out)
 @app.middleware("http")
-async def enforce_https_middleware(request: Request, call_next):
+async def _security_headers(request: Request, call_next):
+    return await security_headers_middleware(request, call_next)
+
+@app.middleware("http")
+async def _body_size(request: Request, call_next):
+    return await body_size_limit_middleware(request, call_next)
+
+@app.middleware("http")
+async def _request_id(request: Request, call_next):
+    return await request_id_middleware(request, call_next)
+
+@app.middleware("http")
+async def _https(request: Request, call_next):
     return await https_redirect_middleware(request, call_next)
