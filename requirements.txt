@@ -13,4 +13,5 @@ reportlab>=4.2.2
 pypdfium2>=5.12.1
 x402[fastapi,evm,extensions]>=2.16.0
 cdp-sdk>=0.22.0
+slowapi>=0.1.9
 logtail-python>=0.3.0
