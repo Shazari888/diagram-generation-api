@@ -108,6 +108,16 @@ if settings.x402_enabled:
     if not settings.x402_pay_to:
         raise ValueError("X402_PAY_TO is required when X402_ENABLED=true")
 
+    # Patch Base mainnet USDC to use Permit2 (Dexter facilitator migrated from EIP-3009)
+    try:
+        from x402.mechanisms.evm.constants import NETWORK_CONFIGS
+        if settings.x402_network in NETWORK_CONFIGS:
+            asset = NETWORK_CONFIGS[settings.x402_network].get("default_asset")
+            if asset and "asset_transfer_method" not in asset:
+                asset["asset_transfer_method"] = "permit2"
+    except Exception:
+        pass  # Non-fatal: falls back to EIP-3009 which may still work
+
     if "api.cdp.coinbase.com" in settings.x402_facilitator_url:
         facilitator = HTTPFacilitatorClient(_build_cdp_facilitator_config())
     else:
