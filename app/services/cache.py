@@ -22,10 +22,13 @@ async def connect() -> None:
     try:
         await client.ping()
         _client = client
-        log.info("Redis connected")
+        log.info("Redis connected: rate limiting and caching active")
     except Exception as exc:
         _client = None
-        log.warning("Redis unavailable (%s): caching and rate limiting disabled", type(exc).__name__)
+        log.warning(
+            "Redis unavailable (%s: %s): caching and rate limiting disabled",
+            type(exc).__name__, str(exc)[:120],
+        )
 
 
 async def disconnect() -> None:
@@ -65,11 +68,14 @@ async def set_cached(prefix: str, payload: dict, value: str) -> None:
 async def increment_counter(key: str, window_seconds: int) -> int:
     """Increment a sliding-window counter. Returns current count, or 0 if Redis is unavailable."""
     if not _client:
+        log.debug("increment_counter: Redis not connected, returning 0 for key=%s", key)
         return 0
     try:
         count = await _client.incr(key)
         if count == 1:
             await _client.expire(key, window_seconds)
+        log.debug("increment_counter: key=%s count=%d", key, count)
         return count
-    except RedisError:
+    except RedisError as exc:
+        log.warning("increment_counter Redis error: %s", exc)
         return 0
