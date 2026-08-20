@@ -30,7 +30,7 @@ from app.services import cache, db
 
 install_log_filter()
 
-# Better Stack / Logtail structured log streaming
+# Better Stack / Logtail structured log streaming (active: 2024-08-20)
 if settings.logtail_token:
     from logtail import LogtailHandler
     _logtail_handler = LogtailHandler(source_token=settings.logtail_token)
