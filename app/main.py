@@ -29,6 +29,14 @@ from app.services import cache, db
 
 install_log_filter()
 
+# Better Stack / Logtail structured log streaming
+if settings.logtail_token:
+    from logtail import LogtailHandler
+    _logtail_handler = LogtailHandler(source_token=settings.logtail_token)
+    _logtail_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_logtail_handler)
+    logging.getLogger(__name__).info("Logtail logging active")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     admin_ip_allowlist: str = ""        # Comma-separated IPs allowed to hit admin routes; empty = no restriction
     cors_allowed_origins: str = ""      # Comma-separated allowed origins; empty = block all cross-origin
 
+    # Monitoring
+    logtail_token: str | None = None  # Better Stack source token
+
     # Deprecated legacy config retained for older local experiments.
     # The active app is x402-only and does not require Stripe settings.
 
