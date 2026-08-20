@@ -1,7 +1,8 @@
 import json
+import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,10 @@ from app.api.schemas import (
 )
 from app.auth import verify_api_key
 from app.config import settings
+from app.security import limiter
 from app.services import cache, db, llm, renderer
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -250,7 +254,9 @@ async def generate_diagram(
 
 
 @router.post("/paid/diagrams/generate/svg", response_model=GenerateDiagramResponse)
+@limiter.limit(settings.rate_limit_paid)
 async def generate_diagram_paid_svg(
+    request: Request,
     body: GenerateDiagramRequest,
     session: AsyncSession = Depends(db.get_session),
 ) -> GenerateDiagramResponse:
@@ -259,7 +265,9 @@ async def generate_diagram_paid_svg(
 
 
 @router.post("/paid/diagrams/generate/png", response_model=GenerateDiagramResponse)
+@limiter.limit(settings.rate_limit_paid)
 async def generate_diagram_paid_png(
+    request: Request,
     body: GenerateDiagramRequest,
     session: AsyncSession = Depends(db.get_session),
 ) -> GenerateDiagramResponse:

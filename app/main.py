@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from x402 import x402ResourceServer
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient
 from x402.http.middleware.fastapi import payment_middleware
@@ -10,7 +12,15 @@ from x402.mechanisms.evm.exact import ExactEvmServerScheme
 
 from app.api.routes import router
 from app.config import settings
+from app.security import (
+    https_redirect_middleware,
+    install_log_filter,
+    limiter,
+    record_payment_failure,
+)
 from app.services import cache, db
+
+install_log_filter()
 
 
 @asynccontextmanager
@@ -22,6 +32,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# Rate limiter state
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
+
 app.include_router(router)
 
 def _build_cdp_facilitator_config() -> dict[str, object]:
@@ -111,5 +129,15 @@ if settings.x402_enabled:
     _x402_middleware = payment_middleware(x402_routes, x402_server)
 
     @app.middleware("http")
-    async def x402_http_middleware(request, call_next):
-        return await _x402_middleware(request, call_next)
+    async def x402_http_middleware(request: Request, call_next):
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+        response = await _x402_middleware(request, call_next)
+        if response.status_code == 402:
+            record_payment_failure(client_ip, request.url.path)
+        return response
+
+
+# HTTPS enforcement — outermost layer, registered after x402 so it runs first
+@app.middleware("http")
+async def enforce_https_middleware(request: Request, call_next):
+    return await https_redirect_middleware(request, call_next)

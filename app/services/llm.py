@@ -32,6 +32,15 @@ async def generate_source(prompt: str, diagram_type: str) -> str:
             raise ValueError("OpenAI returned empty diagram source")
         return content.strip()
     except Exception as exc:
-        # Fall back to a simple generated diagram so the API remains testable locally
-        log.warning('OpenAI call failed (%s). Using fallback diagram. Error: %s', type(exc).__name__, exc)
-        return FALLBACK_BY_TYPE.get(diagram_type.lower(), FALLBACK_BY_TYPE["mermaid"])
+        if settings.use_llm_fallback:
+            # Only in local/dev mode: return a canned diagram so the API stays testable
+            # without a valid OpenAI key.
+            log.warning(
+                "OpenAI call failed (%s). Using fallback diagram (use_llm_fallback=true).",
+                type(exc).__name__,
+            )
+            return FALLBACK_BY_TYPE.get(diagram_type.lower(), FALLBACK_BY_TYPE["mermaid"])
+        # In production: surface the error so the caller gets a proper 500,
+        # not a silent canned response that was never paid for meaningfully.
+        log.error("OpenAI call failed (%s).", type(exc).__name__)
+        raise
