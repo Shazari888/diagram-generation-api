@@ -3,7 +3,9 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from x402 import x402ResourceServer
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient
 from x402.http.middleware.fastapi import payment_middleware
@@ -35,6 +37,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 # Rate limiter state
 app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -128,9 +131,27 @@ if settings.x402_enabled:
     }
     _x402_middleware = payment_middleware(x402_routes, x402_server)
 
+    _PAID_PATHS = {f"/paid/diagrams/generate/{fmt}" for fmt in _format_prices}
+
     @app.middleware("http")
     async def x402_http_middleware(request: Request, call_next):
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+
+        # Rate-limit paid endpoints before x402 even issues a challenge
+        if request.method == "POST" and request.url.path in _PAID_PATHS:
+            from app.services.cache import _client as redis_client
+            if redis_client:
+                rate_key = f"ratelimit:paid:{client_ip}"
+                try:
+                    count = await redis_client.incr(rate_key)
+                    if count == 1:
+                        await redis_client.expire(rate_key, 60)
+                    if count > 20:
+                        from fastapi.responses import JSONResponse
+                        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
+                except Exception:
+                    pass  # Redis unavailable — fail open rather than block legitimate traffic
+
         response = await _x402_middleware(request, call_next)
         if response.status_code == 402:
             record_payment_failure(client_ip, request.url.path)
