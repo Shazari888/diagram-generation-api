@@ -40,7 +40,17 @@ async def get_cached(prefix: str, payload: dict) -> str | None:
         return None
 
 
-async def set_cached(prefix: str, payload: dict, value: str) -> None:
+async def increment_counter(key: str, window_seconds: int) -> int:
+    """Increment a Redis counter and set its TTL on first increment. Returns current count, or 0 on error."""
+    if not _client:
+        return 0
+    try:
+        count = await _client.incr(key)
+        if count == 1:
+            await _client.expire(key, window_seconds)
+        return count
+    except RedisError:
+        return 0
     if not _client:
         return
     try:

@@ -139,18 +139,11 @@ if settings.x402_enabled:
 
         # Rate-limit paid endpoints before x402 even issues a challenge
         if request.method == "POST" and request.url.path in _PAID_PATHS:
-            from app.services.cache import _client as redis_client
-            if redis_client:
-                rate_key = f"ratelimit:paid:{client_ip}"
-                try:
-                    count = await redis_client.incr(rate_key)
-                    if count == 1:
-                        await redis_client.expire(rate_key, 60)
-                    if count > 20:
-                        from fastapi.responses import JSONResponse
-                        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
-                except Exception:
-                    pass  # Redis unavailable — fail open rather than block legitimate traffic
+            from app.services.cache import increment_counter
+            count = await increment_counter(f"ratelimit:paid:{client_ip}", 60)
+            if count > 20:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
 
         response = await _x402_middleware(request, call_next)
         if response.status_code == 402:
