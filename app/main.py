@@ -144,40 +144,35 @@ if settings.x402_enabled:
     async def x402_http_middleware(request: Request, call_next):
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
 
-        if request.method == "POST" and request.url.path in _PAID_PATHS:
-            # Idempotency: if client sends X-Idempotency-Key, return cached result for duplicates
-            idem_key = request.headers.get("x-idempotency-key")
-            if idem_key:
-                from app.services.cache import get_cached, set_cached
-                cached = await get_cached("idem", {"key": idem_key, "path": request.url.path})
-                if cached:
-                    audit("payment.idempotent_replay", request, idem_key=idem_key[:16])
-                    import json
-                    from fastapi.responses import JSONResponse as _JSONResponse
-                    return _JSONResponse(content=json.loads(cached))
+        # Only run x402 logic on paid paths; all other routes go directly to call_next
+        if not (request.method == "POST" and request.url.path in _PAID_PATHS):
+            return await call_next(request)
 
-            # Rate limit: 20 requests per IP per 60 seconds
-            from app.services.cache import increment_counter
-            count = await increment_counter(f"ratelimit:paid:{client_ip}", 60)
-            if count > 20:
-                audit("rate_limit.exceeded", request)
-                return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
+        # Idempotency: if client sends X-Idempotency-Key, return cached result for duplicates
+        idem_key = request.headers.get("x-idempotency-key")
+        if idem_key:
+            from app.services.cache import get_cached
+            cached = await get_cached("idem", {"key": idem_key, "path": request.url.path})
+            if cached:
+                import json
+                from fastapi.responses import JSONResponse as _JSONResponse
+                audit("payment.idempotent_replay", request, idem_key=idem_key[:16])
+                return _JSONResponse(content=json.loads(cached))
+
+        # Rate limit: 20 requests per IP per 60 seconds
+        from app.services.cache import increment_counter
+        count = await increment_counter(f"ratelimit:paid:{client_ip}", 60)
+        if count > 20:
+            audit("rate_limit.exceeded", request)
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please slow down."})
 
         response = await _x402_middleware(request, call_next)
 
         if response.status_code == 402:
             record_payment_failure(client_ip, request.url.path)
             audit("payment.challenge_issued", request)
-        elif response.status_code == 200 and request.url.path in _PAID_PATHS:
+        elif response.status_code == 200:
             audit("payment.verified_success", request)
-            # Store idempotency result
-            idem_key = request.headers.get("x-idempotency-key")
-            if idem_key:
-                from app.services.cache import set_cached
-                # Read body from response for caching - store only on success
-                # Note: response body streaming means we log success but skip body cache here;
-                # full idempotency body caching requires response buffering (out of scope).
-                pass
 
         return response
 
