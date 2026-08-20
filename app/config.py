@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 3600
 
     openai_api_key: str
-    openai_model: str = "gpt-3.5-turbo"
+    openai_model: str = "gpt-4o-mini"
 
     kroki_base_url: str = "https://kroki.io"
     mermaid_ink_base_url: str = "https://mermaid.ink"
