@@ -113,10 +113,15 @@ if settings.x402_enabled:
         from x402.mechanisms.evm.constants import NETWORK_CONFIGS
         if settings.x402_network in NETWORK_CONFIGS:
             asset = NETWORK_CONFIGS[settings.x402_network].get("default_asset")
-            if asset and "asset_transfer_method" not in asset:
-                asset["asset_transfer_method"] = "permit2"
+           if asset:
+               if "asset_transfer_method" not in asset:
+                   asset["asset_transfer_method"] = "permit2"
+               # Fix asset name to show USDC clearly
+               if asset.get("name") == "USD Coin":
+                   asset["name"] = "USDC"
     except Exception:
-        pass  # Non-fatal: falls back to EIP-3009 which may still work
+       pass  # Non-fatal: falls back to EIP-3009 which may still work
+
 
     if "api.cdp.coinbase.com" in settings.x402_facilitator_url:
         facilitator = HTTPFacilitatorClient(_build_cdp_facilitator_config())
