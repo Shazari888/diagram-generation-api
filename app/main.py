@@ -108,7 +108,7 @@ if settings.x402_enabled:
     if not settings.x402_pay_to:
         raise ValueError("X402_PAY_TO is required when X402_ENABLED=true")
 
-    # Patch Base mainnet USDC to use Permit2 (Dexter facilitator migrated from EIP-3009)
+    # Patch Base mainnet USDC to use Permit2 (Dexter facilitator migrated from EIP-3009 on 2024-08-20)
     try:
         from x402.mechanisms.evm.constants import NETWORK_CONFIGS
         if settings.x402_network in NETWORK_CONFIGS:
