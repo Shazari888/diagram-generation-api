@@ -1,6 +1,8 @@
 from openai import AsyncOpenAI
 import logging
 
+from fastapi import HTTPException
+
 from app.config import settings
 
 log = logging.getLogger(__name__)
@@ -32,6 +34,14 @@ async def generate_source(prompt: str, diagram_type: str) -> str:
             raise ValueError("OpenAI returned empty diagram source")
         return content.strip()
     except Exception as exc:
-        # Fall back to a simple generated diagram so the API remains testable locally
-        log.warning('OpenAI call failed (%s). Using fallback diagram. Error: %s', type(exc).__name__, exc)
-        return FALLBACK_BY_TYPE.get(diagram_type.lower(), FALLBACK_BY_TYPE["mermaid"])
+        if settings.use_llm_fallback:
+            log.warning(
+                "OpenAI call failed (%s). Using fallback diagram (use_llm_fallback=true).",
+                type(exc).__name__,
+            )
+            return FALLBACK_BY_TYPE.get(diagram_type.lower(), FALLBACK_BY_TYPE["mermaid"])
+        log.error("OpenAI call failed (%s): %s", type(exc).__name__, str(exc)[:200])
+        raise HTTPException(
+            status_code=503,
+            detail=f"Diagram generation unavailable: upstream LLM error ({type(exc).__name__})",
+        ) from exc

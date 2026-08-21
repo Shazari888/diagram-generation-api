@@ -146,6 +146,15 @@ async def _post_kroki(client: httpx.AsyncClient, url: str, source: str) -> httpx
 
 
 async def render(source: str, diagram_type: str, output_format: str = "svg") -> str:
+    # Mermaid Ink is fast and purpose-built for mermaid; try it first to avoid
+    # the long Kroki retry chain (which uses a headless browser that often fails
+    # on shared cloud infra).
+    if diagram_type.lower() == "mermaid":
+        try:
+            return await _render_mermaid_ink(source, output_format)
+        except httpx.HTTPError:
+            pass  # fall through to Kroki
+
     url = f"{settings.kroki_base_url}/{diagram_type}/{output_format}"
     async with httpx.AsyncClient() as client:
         response = await _post_kroki(client, url, source)

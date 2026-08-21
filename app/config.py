@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 3600
 
     openai_api_key: str
-    openai_model: str = "gpt-3.5-turbo"
+    openai_model: str = "gpt-4o-mini"
 
     kroki_base_url: str = "https://kroki.io"
     mermaid_ink_base_url: str = "https://mermaid.ink"
@@ -33,9 +33,20 @@ class Settings(BaseSettings):
     cdp_api_key_id: str | None = None
     cdp_api_key_secret: str | None = None
 
-    # Stripe MPP
-    stripe_secret_key: str | None = None
-    stripe_profile_id: str | None = None
+    # Security
+    enforce_https: bool = False
+    rate_limit_free: str = "5/day"      # Free diagram cap per IP
+    rate_limit_paid: str = "20/minute"
+    rate_limit_global: str = "60/minute"
+    use_llm_fallback: bool = False
+    admin_ip_allowlist: str = ""        # Comma-separated IPs allowed to hit admin routes; empty = no restriction
+    cors_allowed_origins: str = ""      # Comma-separated allowed origins; empty = block all cross-origin
+
+    # Monitoring
+    logtail_token: str | None = None  # Better Stack source token
+
+    # Deprecated legacy config retained for older local experiments.
+    # The active app is x402-only and does not require Stripe settings.
 
 
 settings = Settings()

@@ -1,14 +1,9 @@
 """
-Stripe MPP (Machine Payment Protocol) middleware for FastAPI.
+Legacy payment middleware retained for historical reference only.
 
-Intercepts POST /paid/diagrams/generate/{svg,png,pdf} and returns a
-402 Payment Required challenge with WWW-Authenticate: Payment header
-when no valid Stripe credential is present.
-
-Pricing:
-  /paid/diagrams/generate/svg  -> $0.03
-  /paid/diagrams/generate/png  -> $0.05
-  /paid/diagrams/generate/pdf  -> $0.07
+This app now uses x402 as the active payment flow. The middleware below was
+used during an earlier Stripe MPP experiment and is no longer part of the
+runtime request path.
 """
 
 import base64
@@ -33,10 +28,10 @@ _SCHEME = "Payment"
 _CHALLENGE_TTL = 300  # 5 minutes
 
 
-def _make_secret_key(stripe_secret_key: str) -> bytes:
+def _make_secret_key(secret_key: str) -> bytes:
     return hmac.new(
-        stripe_secret_key.encode(),
-        b"mpp-challenge-signing",
+        secret_key.encode(),
+        b"legacy-payment-signing",
         hashlib.sha256,
     ).digest()
 
@@ -57,7 +52,7 @@ def _build_challenge(
         "expiresAt": expires_at,
         "methods": [
             {
-                "type": "stripe/charge",
+                "type": "legacy-payment",
                 "amount": str(amount_cents),
                 "currency": "usd",
                 "networkId": network_id,
@@ -104,17 +99,17 @@ def _is_valid_credential(authorization: str | None, secret_key: bytes) -> bool:
     return False
 
 
-class StripeMppMiddleware(BaseHTTPMiddleware):
+class LegacyPaymentMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        stripe_secret_key: str,
-        stripe_profile_id: str,
+        secret_key: str,
+        network_id: str,
         defer_to_x402: bool = False,
     ) -> None:
         super().__init__(app)
-        self._profile_id = stripe_profile_id
-        self._secret_key = _make_secret_key(stripe_secret_key)
+        self._profile_id = network_id
+        self._secret_key = _make_secret_key(secret_key)
         self._defer_to_x402 = defer_to_x402
 
     async def dispatch(
@@ -149,7 +144,7 @@ class StripeMppMiddleware(BaseHTTPMiddleware):
             )
             return JSONResponse(
                 status_code=402,
-                content={"error": "Payment required", "detail": "Valid Stripe MPP credential required."},
+                content={"error": "Payment required", "detail": "Valid legacy payment credential required."},
                 headers={"WWW-Authenticate": challenge},
             )
 
