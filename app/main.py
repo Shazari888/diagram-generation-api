@@ -121,12 +121,8 @@ if settings.x402_enabled:
     except Exception:
         pass  # Non-fatal: falls back to EIP-3009 which may still work
 
-    # Explicit Permit2 extra to ensure the challenge always contains assetTransferMethod
-    _PERMIT2_EXTRA = {
-        "name": "USDC",
-        "version": "2",
-        "assetTransferMethod": "permit2",
-    }
+    # Explicit extra — leave empty so facilitator negotiates the transfer method
+    _PERMIT2_EXTRA = None
 
     if "api.cdp.coinbase.com" in settings.x402_facilitator_url:
         facilitator = HTTPFacilitatorClient(_build_cdp_facilitator_config())
@@ -150,7 +146,7 @@ if settings.x402_enabled:
                 network=settings.x402_network,
                 pay_to=settings.x402_pay_to,
                 price=price,
-                extra=_PERMIT2_EXTRA,
+                extra=_PERMIT2_EXTRA if _PERMIT2_EXTRA else None,
             ),
             description=f"Generate and store a diagram ({fmt} format)",
             mime_type="application/json",
