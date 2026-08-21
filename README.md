@@ -197,6 +197,7 @@ Mermaid diagrams go to mermaid.ink first because Kroki's mermaid renderer requir
 3. Enter your API key and a prompt
 4. Select diagram type and format
 5. Click **Generate** to preview the result
+6. **Free endpoint** (`/diagrams/generate`): **5 diagrams per IP per day** — after that, returns `429 Too Many Requests`
 
 ## Environment variable reference
 
