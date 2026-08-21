@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # Security
     enforce_https: bool = False
+    rate_limit_free: str = "5/day"      # Free diagram cap per IP
     rate_limit_paid: str = "20/minute"
     rate_limit_global: str = "60/minute"
     use_llm_fallback: bool = False

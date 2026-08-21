@@ -245,6 +245,7 @@ async def _generate_diagram(
     response_model=GenerateDiagramResponse,
     include_in_schema=False,
 )
+@limiter.limit(settings.rate_limit_free)
 async def generate_diagram(
     request: Request,
     body: GenerateDiagramRequest,
