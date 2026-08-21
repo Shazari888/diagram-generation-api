@@ -220,3 +220,7 @@ Mermaid diagrams go to mermaid.ink first because Kroki's mermaid renderer requir
 
 See [`.env.example`](.env.example) for the full configuration template with all variable names and example values.
 
+##Contact
+James @ internetprosperity888@gmail.com
+
+
