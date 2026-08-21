@@ -1,3 +1,4 @@
+
 # Diagram Generation API
 
 AI-powered diagram generation API that renders Mermaid, D2, PlantUML, and Graphviz diagrams to SVG or PNG. Paid endpoints are protected with [x402](https://x402.org) and settle on **Base mainnet** (`eip155:8453`) using USDC via the [xpay facilitator](https://xpay.sh) — zero-fee and gas-sponsored.
@@ -261,7 +262,7 @@ Client
 
 The paid endpoints use the [x402 protocol](https://x402.org) with the `exact` EVM scheme on Base mainnet.
 
-### Pricing
+### Deploy steps
 
 | Format | Price |
 |---|---|
