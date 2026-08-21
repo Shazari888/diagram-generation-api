@@ -1,4 +1,4 @@
-﻿"""
+"""
 Security middleware and utilities for the Diagram Generation API.
 
 Covers:
@@ -212,3 +212,4 @@ def audit(event: str, request: Request, **extra) -> None:
     for k, v in extra.items():
         parts.append(f"{k}={v}")
     audit_log.info(" ".join(parts))
+

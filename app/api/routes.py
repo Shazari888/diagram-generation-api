@@ -14,7 +14,7 @@ from app.api.schemas import (
 )
 from app.auth import verify_api_key
 from app.config import settings
-from app.security import audit, check_admin_ip, limiter
+from app.security import audit, check_admin_ip, limiter, verify_gateway_key
 from app.services import cache, db, llm, renderer
 
 log = logging.getLogger(__name__)
@@ -300,3 +300,4 @@ async def get_diagram(
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
     return DiagramResponse.model_validate(diagram)
+
