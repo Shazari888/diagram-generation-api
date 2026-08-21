@@ -108,19 +108,18 @@ if settings.x402_enabled:
     if not settings.x402_pay_to:
         raise ValueError("X402_PAY_TO is required when X402_ENABLED=true")
 
-    # Patch Base mainnet USDC to use Permit2 (Dexter facilitator migrated from EIP-3009 on 2024-08-20)
+    # Patch Base mainnet USDC to use Permit2 (Dexter facilitator migrated from EIP-3009)
     try:
         from x402.mechanisms.evm.constants import NETWORK_CONFIGS
         if settings.x402_network in NETWORK_CONFIGS:
             asset = NETWORK_CONFIGS[settings.x402_network].get("default_asset")
-           if asset:
-               if "asset_transfer_method" not in asset:
-                   asset["asset_transfer_method"] = "permit2"
-               # Fix asset name to show USDC clearly
-               if asset.get("name") == "USD Coin":
-                   asset["name"] = "USDC"
+            if asset:
+                if "asset_transfer_method" not in asset:
+                    asset["asset_transfer_method"] = "permit2"
+                if asset.get("name") == "USD Coin":
+                    asset["name"] = "USDC"
     except Exception:
-       pass  # Non-fatal: falls back to EIP-3009 which may still work
+        pass  # Non-fatal: falls back to EIP-3009 which may still work
 
 
     if "api.cdp.coinbase.com" in settings.x402_facilitator_url:
