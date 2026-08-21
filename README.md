@@ -52,7 +52,7 @@ Client
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | None | Health check |
-| `GET` | `/visualizer` | None | Browser-based visualizer UI |
+| `GET` | `/visualizer` | None | Browser-based visualizer UI |Generate a diagram (5/day per IP, requires API key)
 | `POST` | `/paid/diagrams/generate/svg` | x402 payment | Generate SVG diagram |
 | `POST` | `/paid/diagrams/generate/png` | x402 payment | Generate PNG diagram |
 | `POST` | `/diagrams/generate` | `X-API-Key` header | Admin/internal endpoint |
@@ -197,12 +197,26 @@ Mermaid diagrams go to mermaid.ink first because Kroki's mermaid renderer requir
 3. Enter your API key and a prompt
 4. Select diagram type and format
 5. Click **Generate** to preview the result
-6. **Free endpoint** (`/diagrams/generate`): **5 diagrams per IP per day** — after that, returns `429 Too Many Requests`
+
+
+
+## API Endpoints
+
+### Free (rate-limited) (Visualizer Only)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/diagrams/generate` | Generate a diagram (5/day per IP, requires API key) |
+| `GET` | `/health` | Health check |
+
+### Paid (x402 — USDC on Base)
+
+| Method | Path | Price | Description |
+|---|---|---|---|
+| `POST` | `/paid/diagrams/generate/svg` | $0.05 | Generate diagram as SVG | 20/minute
+| `POST` | `/paid/diagrams/generate/png` | $0.07 | Generate diagram as PNG | 20/minute
 
 ## Environment variable reference
 
 See [`.env.example`](.env.example) for the full configuration template with all variable names and example values.
-
-
-ick **Generate**
 
