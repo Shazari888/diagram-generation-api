@@ -186,6 +186,22 @@ if settings.x402_enabled:
         response = await _x402_middleware(request, call_next)
 
         if response.status_code == 402:
+            # Fix: replace http:// with https:// in challenge (for proxy behind Railway)
+            proto = request.headers.get("x-forwarded-proto", "http")
+            if proto == "https":
+                challenge_header = response.headers.get("payment-required")
+                if challenge_header:
+                    try:
+                        import base64, json
+                        decoded = json.loads(base64.b64decode(challenge_header).decode())
+                        url = decoded.get("resource", {}).get("url", "")
+                        if url.startswith("http://"):
+                            decoded["resource"]["url"] = url.replace("http://", "https://", 1)
+                            new_challenge = base64.b64encode(json.dumps(decoded).encode()).decode()
+                            response.headers["payment-required"] = new_challenge
+                    except Exception as e:
+                        log.warning("Failed to patch challenge URL: %s", str(e))
+
             record_payment_failure(client_ip, request.url.path)
             audit("payment.challenge_issued", request)
         elif response.status_code == 200:
