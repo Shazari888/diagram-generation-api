@@ -213,3 +213,23 @@ def audit(event: str, request: Request, **extra) -> None:
         parts.append(f"{k}={v}")
     audit_log.info(" ".join(parts))
 
+
+# ---------------------------------------------------------------------------
+# x402 Gateway authentication (optional)
+# ---------------------------------------------------------------------------
+
+def verify_gateway_key(request: Request) -> str:
+    """
+    Verify x-api-key header if X402_GATEWAY_KEY is configured (x402layer.cc).
+    If X402_GATEWAY_KEY is not set, skip verification (allow other marketplaces).
+    """
+    if not settings.x402_gateway_key:
+        return ""
+    
+    key = request.headers.get("x-api-key", "")
+    if key != settings.x402_gateway_key:
+        audit("x402_gateway.auth_failed", request)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid x-api-key")
+    
+    return key
