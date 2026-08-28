@@ -1,0 +1,12 @@
+# Diagram Generation API
+
+> Pay-per-call text-to-diagram generation for autonomous agents.
+
+- [Agent Instructions](./agent-instructions.md): Canonical endpoints, request schema, payment flow, and response interpretation.
+- [API Reference](https://diagram-generation-api-production.up.railway.app/openapi.json): OpenAPI 3.1 machine-readable contract.
+- [Interactive API Docs](https://diagram-generation-api-production.up.railway.app/docs): Swagger UI.
+- [README](./README.md): Human-oriented overview, examples, limits, and architecture.
+- [Docs Home](./docs/README.md): Entry point for supporting docs.
+- [Pricing](./docs/pricing.md): SVG and PNG prices, payment network, and unit conventions.
+- [Security and Data](./docs/security-and-data.md): Secrets, payment metadata, prompts, artifacts, logs, and retention.
+- [Changelog](./CHANGELOG.md): Version history and contract changes.
