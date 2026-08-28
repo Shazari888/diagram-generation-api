@@ -153,9 +153,30 @@ if settings.x402_enabled:
         )
         for fmt, price in _format_prices.items()
     }
+
+    # Add edit endpoints (same pricing as generate)
+    x402_routes.update({
+        f"POST /paid/diagrams/edit/{fmt}": RouteConfig(
+            accepts=PaymentOption(
+                scheme="exact",
+                network=settings.x402_network,
+                pay_to=settings.x402_pay_to,
+                price=price,
+                extra=_PERMIT2_EXTRA if _PERMIT2_EXTRA else None,
+            ),
+            description=f"Edit and render diagram ({fmt} format)",
+            mime_type="application/json",
+        )
+        for fmt, price in _format_prices.items()
+    })
+
     _x402_middleware = payment_middleware(x402_routes, x402_server)
 
-    _PAID_PATHS = {f"/paid/diagrams/generate/{fmt}" for fmt in _format_prices}
+    _PAID_PATHS = {
+        f"/paid/diagrams/generate/{fmt}" for fmt in _format_prices
+    } | {
+        f"/paid/diagrams/edit/{fmt}" for fmt in _format_prices
+    }
 
     @app.middleware("http")
     async def x402_http_middleware(request: Request, call_next):

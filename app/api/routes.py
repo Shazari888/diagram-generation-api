@@ -12,6 +12,11 @@ from app.api.schemas import (
     GenerateDiagramResponse,
     HealthResponse,
 )
+from app.api.edit_schemas import (
+    EditDiagramRequest,
+    EditDiagramResponse,
+)
+from app.services.edit_engine import DiagramEditEngine, EditEngineException
 from app.auth import verify_api_key
 from app.config import settings
 from app.security import audit, check_admin_ip, limiter
@@ -300,3 +305,105 @@ async def get_diagram(
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
     return DiagramResponse.model_validate(diagram)
+
+
+# ============================================================================
+# Edit Endpoints (Free and Paid)
+# ============================================================================
+
+
+async def _edit_diagram(
+    body: EditDiagramRequest,
+    session: AsyncSession,
+) -> EditDiagramResponse:
+    """
+    Apply edit operations to diagram source and optionally render.
+    """
+    try:
+        # Apply all operations in sequence
+        engine = DiagramEditEngine()
+        operations_list = [op.model_dump(by_alias=True) for op in body.operations]
+        edited_source, ops_count = engine.apply_operations(
+            body.diagram_source, operations_list
+        )
+    except EditEngineException as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    # Optionally render after edit
+    rendered = None
+    if body.render_after_edit:
+        try:
+            rendered = await renderer.render(
+                edited_source, body.diagram_type, body.format
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return EditDiagramResponse(
+        ok=True,
+        endpoint="/diagrams/edit",
+        diagram_type=body.diagram_type,
+        format=body.format,
+        edited_diagram_source=edited_source,
+        rendered=rendered,
+        metadata={
+            "operations_applied": ops_count,
+            "render_after_edit": body.render_after_edit,
+        },
+    )
+
+
+@router.post(
+    "/diagrams/edit",
+    response_model=EditDiagramResponse,
+    include_in_schema=False,
+)
+@limiter.limit(settings.rate_limit_free)
+async def edit_diagram(
+    request: Request,
+    body: EditDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+    _: str = Depends(verify_api_key),
+) -> EditDiagramResponse:
+    """
+    Free endpoint: Apply edit operations to diagram source.
+    Rate limited to 5 edits per day per IP.
+    """
+    if not check_admin_ip(request):
+        audit("admin.ip_blocked", request)
+        raise HTTPException(status_code=403, detail="Forbidden")
+    audit("admin.edit", request)
+    return await _edit_diagram(body, session)
+
+
+@router.post("/paid/diagrams/edit/svg", response_model=EditDiagramResponse)
+@limiter.limit(settings.rate_limit_paid)
+async def edit_diagram_paid_svg(
+    request: Request,
+    body: EditDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+) -> EditDiagramResponse:
+    """
+    Paid endpoint: Apply edit operations and render as SVG.
+    Requires x402 payment (0.05 USDC).
+    """
+    body.format = "svg"
+    return await _edit_diagram(body, session)
+
+
+@router.post("/paid/diagrams/edit/png", response_model=EditDiagramResponse)
+@limiter.limit(settings.rate_limit_paid)
+async def edit_diagram_paid_png(
+    request: Request,
+    body: EditDiagramRequest,
+    session: AsyncSession = Depends(db.get_session),
+) -> EditDiagramResponse:
+    """
+    Paid endpoint: Apply edit operations and render as PNG.
+    Requires x402 payment (0.05 USDC).
+    """
+    body.format = "png"
+    return await _edit_diagram(body, session)
