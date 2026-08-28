@@ -52,10 +52,13 @@ Client
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | None | Health check |
-| `GET` | `/visualizer` | None | Browser-based visualizer UI |Generate a diagram (5/day per IP, requires API key)
+| `GET` | `/visualizer` | None | Browser-based visualizer UI |
+| `POST` | `/diagrams/generate` | `X-API-Key` header | Generate diagram (5/day per IP) |
+| `POST` | `/diagrams/edit` | `X-API-Key` header | Edit diagram source (5/day per IP) |
 | `POST` | `/paid/diagrams/generate/svg` | x402 payment | Generate SVG diagram |
 | `POST` | `/paid/diagrams/generate/png` | x402 payment | Generate PNG diagram |
-| `POST` | `/diagrams/generate` | `X-API-Key` header | Admin/internal endpoint |
+| `POST` | `/paid/diagrams/edit/svg` | x402 payment | Edit and render SVG diagram |
+| `POST` | `/paid/diagrams/edit/png` | x402 payment | Edit and render PNG diagram |
 | `GET` | `/diagrams/{id}` | `X-API-Key` header | Retrieve a stored diagram |
 
 ## x402 payment model
@@ -85,8 +88,74 @@ The paid endpoints use the [x402 protocol](https://x402.org) with the `exact` EV
 - **Asset:** USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
 - **Fees:** Zero — xpay sponsors gas and charges no fee
 
-## Local setup
+## Diagram Editing
 
+The free `/diagrams/edit` and paid `/paid/diagrams/edit/{svg,png}` endpoints let you apply deterministic transformations to diagram source code.
+
+### Operations
+
+Each edit request accepts a list of operations applied in sequence. All operation types are validated via discriminated union:
+
+#### Text operations
+- `replace_text` — Replace all occurrences of a substring
+- `rename_node` — Rename a node ID (e.g., `A` → `B`)
+- `add_line` — Append a line to the diagram source
+- `remove_line_contains` — Remove all lines containing a substring
+- `prepend_text` — Prepend text to the beginning
+- `append_text` — Append text to the end
+
+#### Style operations
+- `set_node_shape` — Set node shape (rectangle, round, rhombus, etc.)
+- `set_node_color` — Set node fill, stroke, text color, or stroke width
+- `set_node_font_size` — Set font size for a node
+- `set_node_size` — Set node size (font size and/or padding)
+- `set_link_color` — Set edge/link colors globally
+- `set_theme` — Set diagram theme (default, neutral, dark, forest, base)
+- `set_global_font_size` — Set global font size
+
+### Example
+
+```bash
+curl -X POST http://localhost:8000/diagrams/edit \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <your-api-key>" \
+  -d '{
+    "diagram_source": "graph TD\nA[Login] --> B[Check]\nB --> C[Success]",
+    "diagram_type": "mermaid",
+    "format": "svg",
+    "operations": [
+      { "type": "replace_text", "from": "Check", "to": "Verify" },
+      { "type": "set_node_color", "node_id": "A", "fill": "#dbeafe", "stroke": "#1d4ed8" }
+    ],
+    "render_after_edit": true
+  }'
+```
+
+### Response
+
+```json
+{
+  "ok": true,
+  "endpoint": "/diagrams/edit",
+  "diagram_type": "mermaid",
+  "format": "svg",
+  "edited_diagram_source": "graph TD\nA[Login] --> B[Verify]\nB --> C[Success]",
+  "rendered": "<svg>...</svg>",
+  "metadata": {
+    "operations_applied": 2,
+    "render_after_edit": true
+  }
+}
+```
+
+### Pricing
+
+- **Free edits:** `/diagrams/edit` limited to 5 per day per IP
+- **Paid edits:** `/paid/diagrams/edit/svg` and `/png` cost $0.05 USDC each (same x402 payment flow as generation)
+
+Users can batch multiple operations into one API call (one settlement) to minimize cost.
+
+## Local setup
 ### Prerequisites
 
 - Python 3.11+
